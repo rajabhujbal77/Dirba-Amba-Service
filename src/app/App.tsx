@@ -53,7 +53,7 @@ export default function App() {
                 active={currentPage === 'dashboard'}
                 onClick={() => setCurrentPage('dashboard')}
               />
-              
+
               {/* Booking Clerk & Admin have access */}
               {(userRole === 'owner' || userRole === 'booking_clerk') && (
                 <NavItem
@@ -63,7 +63,7 @@ export default function App() {
                   onClick={() => setCurrentPage('new_booking')}
                 />
               )}
-              
+
               {/* Booking Clerk & Admin have access */}
               {(userRole === 'owner' || userRole === 'booking_clerk') && (
                 <NavItem
@@ -73,7 +73,7 @@ export default function App() {
                   onClick={() => setCurrentPage('trip_creation')}
                 />
               )}
-              
+
               {/* All users have access */}
               <NavItem
                 icon="📦"
@@ -81,7 +81,7 @@ export default function App() {
                 active={currentPage === 'trips_deliveries'}
                 onClick={() => setCurrentPage('trips_deliveries')}
               />
-              
+
               {/* Only Admin & Depot Manager (financial access) */}
               {(userRole === 'owner' || userRole === 'depot_manager') && (
                 <NavItem
@@ -91,7 +91,7 @@ export default function App() {
                   onClick={() => setCurrentPage('reports')}
                 />
               )}
-              
+
               {/* Only Admin & Depot Manager */}
               {(userRole === 'owner' || userRole === 'depot_manager') && (
                 <NavItem
@@ -101,7 +101,7 @@ export default function App() {
                   onClick={() => setCurrentPage('receipts')}
                 />
               )}
-              
+
               {/* Only Admin & Depot Manager */}
               {(userRole === 'owner' || userRole === 'depot_manager') && (
                 <NavItem
@@ -111,7 +111,7 @@ export default function App() {
                   onClick={() => setCurrentPage('credit_ledger')}
                 />
               )}
-              
+
               {/* Only Admin has access to Settings */}
               {userRole === 'owner' && (
                 <NavItem
@@ -135,7 +135,7 @@ export default function App() {
         {/* Main Content */}
         <main className="flex-1">
           {currentPage === 'dashboard' && <Dashboard userRole={userRole} />}
-          {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking />}
+          {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={setCurrentPage} />}
           {currentPage === 'trip_creation' && (userRole === 'owner' || userRole === 'booking_clerk') && <TripCreation />}
           {currentPage === 'trips_deliveries' && <TripsDeliveries userRole={userRole} />}
           {currentPage === 'reports' && (userRole === 'owner' || userRole === 'depot_manager') && <Reports />}
@@ -159,11 +159,10 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-        active
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active
           ? 'bg-orange-50 text-orange-600'
           : 'text-gray-600 hover:bg-gray-50'
-      }`}
+        }`}
     >
       <span>{icon}</span>
       <span className="font-medium">{label}</span>

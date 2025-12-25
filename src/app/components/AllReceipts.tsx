@@ -1,67 +1,131 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
+import { bookingsApi } from '../utils/api';
 
 export default function AllReceipts() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
+  const [receipts, setReceipts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
-  const receipts = [
-    {
-      id: 'RCT-001',
-      bookingId: 'BK-001',
-      customer: 'Ramesh Traders',
-      date: '2025-12-21',
-      amount: 25000,
-      paymentMode: 'UPI',
-      status: 'paid',
-      invoiceNumber: 'INV-2025-001'
-    },
-    {
-      id: 'RCT-002',
-      bookingId: 'BK-002',
-      customer: 'Aarav Exports',
-      date: '2025-12-21',
-      amount: 37500,
-      paymentMode: 'Bank Transfer',
-      status: 'paid',
-      invoiceNumber: 'INV-2025-002'
-    },
-    {
-      id: 'RCT-003',
-      bookingId: 'BK-003',
-      customer: 'Krishna Fruits',
-      date: '2025-12-20',
-      amount: 50000,
-      paymentMode: 'Cash',
-      status: 'paid',
-      invoiceNumber: 'INV-2025-003'
-    },
-    {
-      id: 'RCT-004',
-      bookingId: 'BK-004',
-      customer: 'Mangesh Suppliers',
-      date: '2025-12-20',
-      amount: 30000,
-      paymentMode: 'Credit',
-      status: 'pending',
-      invoiceNumber: 'INV-2025-004'
-    },
-    {
-      id: 'RCT-005',
-      bookingId: 'BK-005',
-      customer: 'Priya Fruits',
-      date: '2025-12-19',
-      amount: 15000,
-      paymentMode: 'UPI',
-      status: 'paid',
-      invoiceNumber: 'INV-2025-005'
-    },
-  ];
+  useEffect(() => {
+    loadReceipts();
+  }, []);
+
+  const loadReceipts = async () => {
+    try {
+      const { bookings } = await bookingsApi.getAll();
+
+      // Map bookings to receipt format
+      const mappedReceipts = (bookings || []).map((b: any) => ({
+        id: b.receipt_number || b.id,
+        bookingId: b.id,
+        customer: b.sender_name || b.customer_name || 'N/A',
+        customerPhone: b.sender_phone || b.customer_phone || '',
+        destination: b.destination_depot_name || b.destination_location || 'N/A',
+        date: b.created_at,
+        amount: Number(b.total_amount) || 0,
+        paymentMode: b.payment_method?.replace('_', ' ')?.toUpperCase() || 'Cash',
+        status: b.payment_method === 'credit' || b.payment_method === 'to_pay' ? 'pending' : 'paid',
+        invoiceNumber: b.receipt_number || b.id,
+        receivers: b.receivers || []
+      }));
+
+      setReceipts(mappedReceipts);
+    } catch (error) {
+      console.error('Error loading receipts:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleView = (receipt: any) => {
+    setSelectedReceipt(receipt);
+    setShowModal(true);
+  };
+
+  const handlePrint = (receipt: any) => {
+    setSelectedReceipt(receipt);
+    setShowModal(true);
+    setTimeout(() => window.print(), 100);
+  };
+
+  const handleDownload = (receipt: any) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
+
+    // Header
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(247, 137, 30);
+    doc.text('DRT MANGO TRANSPORT', pageWidth / 2, y, { align: 'center' });
+    y += 15;
+
+    // Receipt Number
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Receipt: ${receipt.id}`, 15, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Date: ${new Date(receipt.date).toLocaleDateString('en-IN')}`, 15, y);
+    y += 8;
+    doc.text(`Destination: ${receipt.destination}`, 15, y);
+    y += 8;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Customer: ${receipt.customer}`, 15, y);
+    doc.setFont('helvetica', 'normal');
+    if (receipt.customerPhone) {
+      doc.text(`  (${receipt.customerPhone})`, 15 + doc.getTextWidth(`Customer: ${receipt.customer}`), y);
+    }
+    y += 12;
+
+    // Receivers & Packages
+    if (receipt.receivers && receipt.receivers.length > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('RECEIVERS & PACKAGES', 15, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      receipt.receivers.forEach((r: any, i: number) => {
+        doc.text(`${i + 1}. ${r.name} (${r.phone})`, 15, y);
+        y += 5;
+        r.packages?.forEach((pkg: any) => {
+          doc.text(`   ${pkg.size} × ${pkg.quantity} = ₹${(pkg.quantity * pkg.price_per_unit).toFixed(0)}`, 15, y);
+          y += 4;
+        });
+        y += 2;
+      });
+    }
+
+    // Total
+    y += 5;
+    doc.setFontSize(12);
+    doc.setFillColor(254, 243, 199);
+    doc.roundedRect(15, y - 2, pageWidth - 30, 14, 3, 3, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL:', 20, y + 8);
+    doc.setTextColor(22, 163, 74);
+    doc.text(`₹${receipt.amount.toLocaleString('en-IN')}`, pageWidth - 20, y + 8, { align: 'right' });
+
+    doc.save(`${receipt.id}.pdf`);
+  };
 
   const filteredReceipts = receipts.filter(receipt => {
-    const matchesSearch = receipt.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         receipt.bookingId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         receipt.id.toLowerCase().includes(searchTerm.toLowerCase());
+    // If no search term, show all
+    if (!searchTerm.trim()) {
+      const matchesFilter = filterStatus === 'all' || receipt.status === filterStatus;
+      return matchesFilter;
+    }
+
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch =
+      (receipt.customer || '').toLowerCase().includes(searchLower) ||
+      (receipt.bookingId || '').toLowerCase().includes(searchLower) ||
+      (receipt.id || '').toLowerCase().includes(searchLower) ||
+      (receipt.destination || '').toLowerCase().includes(searchLower);
     const matchesFilter = filterStatus === 'all' || receipt.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -69,6 +133,8 @@ export default function AllReceipts() {
   const totalAmount = filteredReceipts.reduce((sum, r) => sum + r.amount, 0);
   const paidAmount = filteredReceipts.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0);
   const pendingAmount = filteredReceipts.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+
+  if (isLoading) return <div className="p-8">Loading receipts...</div>;
 
   return (
     <div className="p-8">
@@ -177,23 +243,31 @@ export default function AllReceipts() {
                     <p className="text-sm text-gray-900">{receipt.paymentMode}</p>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      receipt.status === 'paid'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-orange-100 text-orange-700'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${receipt.status === 'paid'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-orange-100 text-orange-700'
+                      }`}>
                       {receipt.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex gap-2">
-                      <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">
+                      <button
+                        onClick={() => handleView(receipt)}
+                        className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+                      >
                         View
                       </button>
-                      <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                      <button
+                        onClick={() => handlePrint(receipt)}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      >
                         Print
                       </button>
-                      <button className="text-sm text-green-600 hover:text-green-700 font-medium">
+                      <button
+                        onClick={() => handleDownload(receipt)}
+                        className="text-sm text-green-600 hover:text-green-700 font-medium"
+                      >
                         Download
                       </button>
                     </div>
@@ -211,15 +285,82 @@ export default function AllReceipts() {
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="mt-6 flex justify-end gap-3">
-        <button className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium">
-          Export All Receipts
-        </button>
-        <button className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium">
-          Generate Receipt
-        </button>
-      </div>
+      {/* View Modal */}
+      {showModal && selectedReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:bg-white print:relative">
+          <div className="bg-white rounded-xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto print:rounded-none print:max-w-full print:mx-0">
+            <div className="flex justify-between items-center mb-6 print:hidden">
+              <h2 className="text-xl font-bold text-gray-900">Receipt Details</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+            </div>
+
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold text-orange-500">DRT MANGO TRANSPORT</h3>
+              <p className="text-lg font-medium mt-2">{selectedReceipt.id}</p>
+              <p className="text-sm text-gray-600">{new Date(selectedReceipt.date).toLocaleDateString('en-IN')}</p>
+            </div>
+
+            <div className="space-y-3 border-t border-b py-4">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Destination:</span>
+                <span className="font-medium">{selectedReceipt.destination}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Customer:</span>
+                <span className="font-medium">{selectedReceipt.customer}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Payment Mode:</span>
+                <span className="font-medium">{selectedReceipt.paymentMode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Status:</span>
+                <span className={`font-medium ${selectedReceipt.status === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>
+                  {selectedReceipt.status.toUpperCase()}
+                </span>
+              </div>
+            </div>
+
+            {selectedReceipt.receivers && selectedReceipt.receivers.length > 0 && (
+              <div className="mt-4">
+                <h4 className="font-semibold mb-2">Receivers & Packages:</h4>
+                {selectedReceipt.receivers.map((r: any, i: number) => (
+                  <div key={i} className="ml-2 mb-2">
+                    <p className="font-medium">{r.name} ({r.phone})</p>
+                    {r.packages?.map((pkg: any, j: number) => (
+                      <p key={j} className="text-sm text-gray-600 ml-4">
+                        {pkg.size} × {pkg.quantity} = ₹{(pkg.quantity * pkg.price_per_unit).toFixed(0)}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 bg-yellow-50 rounded-lg p-4">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold">TOTAL:</span>
+                <span className="text-2xl font-bold text-green-600">₹{selectedReceipt.amount.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+              >
+                Print
+              </button>
+              <button
+                onClick={() => handleDownload(selectedReceipt)}
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

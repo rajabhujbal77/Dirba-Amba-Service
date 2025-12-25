@@ -15,7 +15,6 @@ interface SettingsProps {
 
 export default function Settings({ userRole }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('users');
-  const [isInitializing, setIsInitializing] = useState(false);
 
   // Only allow admin (owner) to access settings
   if (userRole !== 'owner') {
@@ -28,73 +27,6 @@ export default function Settings({ userRole }: SettingsProps) {
     );
   }
 
-  const initializeDefaultData = async () => {
-    if (!confirm('This will create default depots and packages if they don\'t exist. Continue?')) {
-      return;
-    }
-
-    setIsInitializing(true);
-    try {
-      // Default depots data
-      const defaultDepots = [
-        { name: 'Devgad', type: 'origin' },
-        { name: 'Shirgaon', type: 'origin' },
-        { name: 'Akurdi', type: 'managed' },
-        { name: 'Bhusari Colony', type: 'managed' },
-        { name: 'Sadashiv Peth', type: 'managed' },
-        { name: 'Kolhapur', type: 'direct_pickup' },
-        { name: 'Karad', type: 'direct_pickup' },
-        { name: 'Satara', type: 'direct_pickup' },
-        { name: 'Katraj', type: 'direct_pickup' },
-        { name: 'Navale Bridge', type: 'direct_pickup' },
-        { name: 'Market Yard', type: 'direct_pickup' },
-        { name: 'Bhopal', type: 'direct_pickup' },
-        { name: 'Nagpur', type: 'direct_pickup' },
-        { name: 'Ahilya Nagar', type: 'direct_pickup' },
-      ];
-
-      // Default packages data
-      const defaultPackages = [
-        { name: '1 Dz', basePrice: 50 },
-        { name: '2 Dz', basePrice: 100 },
-        { name: '5 Dz Puttha', basePrice: 200 },
-        { name: '5 Dz (Pinjara)', basePrice: 200 },
-        { name: 'Crate Big', basePrice: 250 },
-        { name: 'Crate Small', basePrice: 125 },
-        { name: 'Half Lakadi', basePrice: 100 },
-      ];
-
-      // Check if data already exists
-      const [depotsRes, packagesRes] = await Promise.all([
-        depotsApi.getAll(),
-        packagesApi.getAll(),
-      ]);
-
-      // Create depots if they don't exist
-      if (!depotsRes.depots || depotsRes.depots.length === 0) {
-        for (const depot of defaultDepots) {
-          await depotsApi.create(depot);
-        }
-        console.log('Default depots created');
-      }
-
-      // Create packages if they don't exist
-      if (!packagesRes.packages || packagesRes.packages.length === 0) {
-        for (const pkg of defaultPackages) {
-          await packagesApi.create(pkg);
-        }
-        console.log('Default packages created');
-      }
-
-      alert('Default data initialized successfully!');
-    } catch (error) {
-      console.error('Error initializing default data:', error);
-      alert('Failed to initialize default data. Check console for details.');
-    } finally {
-      setIsInitializing(false);
-    }
-  };
-
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -102,13 +34,6 @@ export default function Settings({ userRole }: SettingsProps) {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
           <p className="text-gray-600">Manage system configuration and preferences</p>
         </div>
-        <button
-          onClick={initializeDefaultData}
-          disabled={isInitializing}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-        >
-          {isInitializing ? 'Initializing...' : 'Initialize Default Data'}
-        </button>
       </div>
 
       {/* Tabs */}
@@ -148,11 +73,10 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-6 py-3 font-medium border-b-2 transition-colors whitespace-nowrap ${
-        active
-          ? 'border-orange-500 text-orange-600'
-          : 'border-transparent text-gray-600 hover:text-gray-900'
-      }`}
+      className={`px-6 py-3 font-medium border-b-2 transition-colors whitespace-nowrap ${active
+        ? 'border-orange-500 text-orange-600'
+        : 'border-transparent text-gray-600 hover:text-gray-900'
+        }`}
     >
       {children}
     </button>
@@ -597,11 +521,10 @@ function DepotManagement() {
                 <td className="px-6 py-4 font-medium">{depot.number}</td>
                 <td className="px-6 py-4 font-medium">{depot.name}</td>
                 <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    depot.type === 'origin' ? 'bg-purple-100 text-purple-700' :
+                  <span className={`px-2 py-1 rounded text-xs ${depot.type === 'origin' ? 'bg-purple-100 text-purple-700' :
                     depot.type === 'managed' ? 'bg-blue-100 text-blue-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
+                      'bg-green-100 text-green-700'
+                    }`}>
                     {depot.type?.replace('_', ' ')}
                   </span>
                 </td>
@@ -712,7 +635,7 @@ function DepotRoutes() {
     <div className="space-y-6">
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <p className="text-sm text-blue-800">
-          <strong>Info:</strong> Depot Routes allow managed depots to forward packages to other depots. 
+          <strong>Info:</strong> Depot Routes allow managed depots to forward packages to other depots.
           When configured, packages meant for forwarded depots will appear in the origin depot manager's dashboard.
         </p>
       </div>
@@ -796,7 +719,7 @@ function DepotRoutes() {
         {routes.map((route) => {
           const originDepot = depots.find(d => d.id === route.originDepotId);
           const forwardingDepots = depots.filter(d => route.forwardingDepotIds?.includes(d.id));
-          
+
           return (
             <div key={route.id} className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-start justify-between mb-4">
@@ -811,7 +734,7 @@ function DepotRoutes() {
                   Delete
                 </button>
               </div>
-              
+
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Forwards to:</p>
                 <div className="flex flex-wrap gap-2">
@@ -901,7 +824,7 @@ function PackagesPricing() {
   const handlePriceUpdate = async (packageId: string, depotId: string, price: string) => {
     const priceNum = parseFloat(price);
     if (isNaN(priceNum)) return;
-    
+
     try {
       await depotPricingApi.update(packageId, depotId, priceNum);
       loadData();
@@ -914,7 +837,7 @@ function PackagesPricing() {
   const getDepotPrice = (packageId: string, depotId: string) => {
     const depotPrice = pricing.find(p => p.packageId === packageId && p.depotId === depotId);
     if (depotPrice) return depotPrice.price;
-    
+
     const pkg = packages.find(p => p.id === packageId);
     return pkg?.basePrice || 0;
   };
@@ -987,59 +910,104 @@ function PackagesPricing() {
       )}
 
       {/* Pricing Overview Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm" style={{ width: 0, minWidth: '100%' }}>
+        <div className="p-6 border-b border-gray-200 bg-gray-50">
           <h3 className="font-bold text-gray-900">Pricing Overview</h3>
-          <p className="text-sm text-gray-600 mt-1">Base prices can be overridden per depot</p>
+          <p className="text-sm text-gray-600 mt-1">Base prices can be overridden per depot. Use horizontal scroll to view all depots.</p>
         </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
+
+        <div style={{
+          overflowX: 'auto',
+          maxHeight: '70vh',
+          border: '2px solid #e5e7eb',
+          borderRadius: '8px',
+          backgroundColor: 'white'
+        }}>
+          <table className="w-full text-sm" style={{ minWidth: '1200px' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 40 }}>
+              <tr className="bg-gray-100">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase" style={{
+                  position: 'sticky',
+                  left: 0,
+                  zIndex: 30,
+                  backgroundColor: '#f3f4f6',
+                  minWidth: '180px',
+                  borderRight: '2px solid #e5e7eb'
+                }}>
                   Package Size
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase" style={{
+                  position: 'sticky',
+                  left: '180px',
+                  zIndex: 30,
+                  backgroundColor: '#f3f4f6',
+                  minWidth: '130px',
+                  borderRight: '2px solid #e5e7eb'
+                }}>
                   Base Price
                 </th>
-                {depots.map(depot => (
-                  <th key={depot.id} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
-                    {depot.name}
+                {depots.filter(depot => !['Devgad', 'Shirgaon'].includes(depot.name)).map(depot => (
+                  <th key={depot.id} className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase whitespace-nowrap" style={{ minWidth: '130px' }}>
+                    <div className="flex flex-col">
+                      <span>{depot.name}</span>
+                      <span className="text-[10px] text-gray-500 font-normal lowercase">{depot.type?.replace('_', ' ')}</span>
+                    </div>
                   </th>
                 ))}
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase" style={{ minWidth: '130px' }}>
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-gray-200">
               {packages.map((pkg) => (
-                <tr key={pkg.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium sticky left-0 bg-white">{pkg.name}</td>
-                  <td className="px-6 py-4 font-bold text-orange-600">₹{pkg.basePrice}</td>
-                  {depots.map(depot => {
+                <tr key={pkg.id} className="hover:bg-amber-50 transition-colors border-b border-gray-200">
+                  <td className="px-6 py-4 font-medium text-gray-900" style={{
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 20,
+                    backgroundColor: 'white',
+                    minWidth: '180px',
+                    borderRight: '2px solid #e5e7eb'
+                  }}>
+                    {pkg.name}
+                  </td>
+                  <td className="px-6 py-4 font-bold text-orange-600" style={{
+                    position: 'sticky',
+                    left: '180px',
+                    zIndex: 20,
+                    backgroundColor: 'white',
+                    minWidth: '130px',
+                    borderRight: '2px solid #e5e7eb'
+                  }}>
+                    ₹{pkg.basePrice}
+                  </td>
+                  {depots.filter(depot => !['Devgad', 'Shirgaon'].includes(depot.name)).map(depot => {
                     const currentPrice = getDepotPrice(pkg.id, depot.id);
                     const isCustom = pricing.some(p => p.packageId === pkg.id && p.depotId === depot.id);
-                    
+
                     return (
-                      <td key={depot.id} className="px-6 py-4">
-                        <input
-                          type="number"
-                          defaultValue={currentPrice}
-                          onBlur={(e) => {
-                            const newPrice = e.target.value;
-                            if (newPrice && parseFloat(newPrice) !== currentPrice) {
-                              handlePriceUpdate(pkg.id, depot.id, newPrice);
-                            }
-                          }}
-                          className={`w-24 px-2 py-1 border rounded text-sm ${
-                            isCustom ? 'border-orange-500 bg-orange-50' : 'border-gray-300'
-                          }`}
-                          placeholder={String(pkg.basePrice)}
-                        />
+                      <td key={depot.id} className="px-6 py-4 border-r border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500 text-xs">₹</span>
+                          <input
+                            type="number"
+                            defaultValue={currentPrice}
+                            onBlur={(e) => {
+                              const newPrice = e.target.value;
+                              if (newPrice && parseFloat(newPrice) !== currentPrice) {
+                                handlePriceUpdate(pkg.id, depot.id, newPrice);
+                              }
+                            }}
+                            className={`w-20 px-2 py-1 border rounded text-sm transition-all focus:ring-2 focus:ring-orange-500 focus:border-transparent ${isCustom
+                              ? 'border-orange-500 bg-orange-50 text-orange-900 font-medium'
+                              : 'border-gray-200 text-gray-600 bg-gray-50 hover:bg-white hover:border-gray-300'
+                              }`}
+                            placeholder={String(pkg.basePrice)}
+                          />
+                        </div>
                         {isCustom && (
-                          <span className="text-xs text-orange-600 block mt-1">Custom</span>
+                          <span className="text-[10px] text-orange-600 block mt-1 font-medium">Custom Price</span>
                         )}
                       </td>
                     );
@@ -1052,13 +1020,13 @@ function PackagesPricing() {
                           setPackageFormData({ name: pkg.name, basePrice: pkg.basePrice });
                           setShowPackageForm(true);
                         }}
-                        className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+                        className="text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded transition-colors"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeletePackage(pkg.id)}
-                        className="text-sm text-red-600 hover:text-red-700 font-medium"
+                        className="text-xs font-medium text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded transition-colors"
                       >
                         Delete
                       </button>
@@ -1068,8 +1036,12 @@ function PackagesPricing() {
               ))}
               {packages.length === 0 && (
                 <tr>
-                  <td colSpan={depots.length + 3} className="px-6 py-8 text-center text-gray-500">
-                    No packages found. Click "Add Package Size" to create one.
+                  <td colSpan={depots.length + 3} className="px-6 py-12 text-center text-gray-500">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="text-4xl mb-4">📦</span>
+                      <p className="text-lg font-medium text-gray-900">No packages found</p>
+                      <p className="text-sm">Click "Add Package Size" above to create your first package.</p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -1086,6 +1058,7 @@ function SeasonManagement() {
   const [season, setSeason] = useState<any>({ startDate: '', endDate: '', year: new Date().getFullYear() });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   useEffect(() => {
     loadSeason();
@@ -1109,6 +1082,8 @@ function SeasonManagement() {
     setIsSaving(true);
     try {
       await seasonApi.update(season);
+      await loadSeason(); // Reload to get the latest data
+      setShowEditForm(false); // Hide form after successful save
       alert('Season updated successfully!');
     } catch (error) {
       console.error('Error updating season:', error);
@@ -1119,11 +1094,31 @@ function SeasonManagement() {
   };
 
   const isSeasonActive = () => {
-    if (!season.startDate || !season.endDate) return false;
+    if (!season.startDate || !season.endDate) {
+      return false;
+    }
+
+    // Get current date without time
     const now = new Date();
-    const start = new Date(season.startDate);
-    const end = new Date(season.endDate);
+    now.setHours(0, 0, 0, 0);
+
+    // Parse dates - add time component to avoid timezone issues
+    const start = new Date(season.startDate + 'T00:00:00');
+    const end = new Date(season.endDate + 'T23:59:59');
+
+    // Check if dates are valid before using them
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      console.error('Invalid season dates:', { startDate: season.startDate, endDate: season.endDate });
+      return false;
+    }
+
     return now >= start && now <= end;
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString + 'T00:00:00');
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
   if (isLoading) {
@@ -1132,9 +1127,8 @@ function SeasonManagement() {
 
   return (
     <div className="space-y-6">
-      <div className={`rounded-xl border p-6 ${
-        isSeasonActive() ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
-      }`}>
+      <div className={`rounded-xl border p-6 ${isSeasonActive() ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
+        }`}>
         <div className="flex items-center gap-3 mb-2">
           <span className="text-2xl">{isSeasonActive() ? '🥭' : '⏰'}</span>
           <h3 className="font-bold text-gray-900">
@@ -1142,69 +1136,98 @@ function SeasonManagement() {
           </h3>
         </div>
         <p className="text-sm text-gray-700">
-          {isSeasonActive() 
-            ? 'The mango season is currently active. Bookings and trips can be created.'
-            : 'The season is currently inactive. No bookings or trips can be created outside the season dates.'}
+          {isSeasonActive()
+            ? `The mango season is currently active. Bookings and trips can be created.${season.startDate && season.endDate ? ` Current season is from ${formatDate(season.startDate)} to ${formatDate(season.endDate)}.` : ''}`
+            : `The season is currently inactive. No bookings or trips can be created outside the season dates.${season.startDate && season.endDate ? ` Season dates: ${formatDate(season.startDate)} to ${formatDate(season.endDate)}.` : ''}`}
         </p>
-      </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-2xl">
-        <h2 className="font-bold text-gray-900 mb-6">Season Configuration</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Season Year *</label>
-              <input
-                type="number"
-                value={season.year}
-                onChange={(e) => setSeason({ ...season, year: Number(e.target.value) })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                required
-              />
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
-              <input
-                type="date"
-                value={season.startDate}
-                onChange={(e) => setSeason({ ...season, startDate: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
-              <input
-                type="date"
-                value={season.endDate}
-                onChange={(e) => setSeason({ ...season, endDate: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-800">
-              <strong>Warning:</strong> After the end date, no new bookings or trips can be created until the next season is configured.
-            </p>
-          </div>
-
+        {!showEditForm && (
           <button
-            type="submit"
-            disabled={isSaving}
-            className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50"
+            onClick={() => setShowEditForm(true)}
+            className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium text-sm"
           >
-            {isSaving ? 'Saving...' : 'Update Season'}
+            Edit Season
           </button>
-        </form>
+        )}
       </div>
+
+      {showEditForm && (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-2xl">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="font-bold text-gray-900">Season Configuration</h2>
+            <button
+              onClick={() => setShowEditForm(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Season Year *</label>
+                <input
+                  type="number"
+                  value={season.year}
+                  onChange={(e) => setSeason({ ...season, year: Number(e.target.value) })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                <input
+                  type="date"
+                  value={season.startDate}
+                  onChange={(e) => setSeason({ ...season, startDate: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
+                <input
+                  type="date"
+                  value={season.endDate}
+                  onChange={(e) => setSeason({ ...season, endDate: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                <strong>Warning:</strong> After the end date, no new bookings or trips can be created until the next season is configured.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Update Season'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowEditForm(false)}
+                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ============ Backup & Restore ============
 function BackupRestore() {
@@ -1217,7 +1240,7 @@ function BackupRestore() {
     try {
       const response = await backupApi.create();
       const backup = response.backup;
-      
+
       // Download backup as JSON file
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -1228,7 +1251,7 @@ function BackupRestore() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       alert('Backup created and downloaded successfully!');
     } catch (error) {
       console.error('Error creating backup:', error);
@@ -1310,7 +1333,7 @@ function BackupRestore() {
             <p className="text-sm text-gray-600 mb-4">
               Upload a backup file to restore all data. This will overwrite all current data.
             </p>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block">
@@ -1353,7 +1376,7 @@ function BackupRestore() {
       {/* Warning */}
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <p className="text-sm text-red-800">
-          <strong>⚠️ Warning:</strong> Restoring a backup will permanently overwrite all current data. 
+          <strong>⚠️ Warning:</strong> Restoring a backup will permanently overwrite all current data.
           Make sure to create a backup of your current data before restoring.
         </p>
       </div>
