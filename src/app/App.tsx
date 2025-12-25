@@ -140,8 +140,8 @@ export default function App() {
           {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={setCurrentPage} />}
           {currentPage === 'trip_creation' && (userRole === 'owner' || userRole === 'booking_clerk') && <TripCreation />}
           {currentPage === 'trips_deliveries' && <TripsDeliveries userRole={userRole} assignedDepotId={assignedDepotId} />}
-          {currentPage === 'reports' && (userRole === 'owner' || userRole === 'depot_manager') && <Reports />}
-          {currentPage === 'receipts' && (userRole === 'owner' || userRole === 'depot_manager') && <AllReceipts />}
+          {currentPage === 'reports' && (userRole === 'owner' || userRole === 'depot_manager') && <Reports assignedDepotId={assignedDepotId} />}
+          {currentPage === 'receipts' && (userRole === 'owner' || userRole === 'depot_manager') && <AllReceipts assignedDepotId={assignedDepotId} />}
           {currentPage === 'credit_ledger' && (userRole === 'owner' || userRole === 'depot_manager') && <CreditLedger />}
           {currentPage === 'settings' && userRole === 'owner' && <Settings userRole={userRole} />}
         </main>

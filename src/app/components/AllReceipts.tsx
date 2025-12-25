@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import { bookingsApi } from '../utils/api';
 
-export default function AllReceipts() {
+interface AllReceiptsProps {
+  assignedDepotId?: string | null;
+}
+
+export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
@@ -19,7 +23,7 @@ export default function AllReceipts() {
       const { bookings } = await bookingsApi.getAll();
 
       // Map bookings to receipt format
-      const mappedReceipts = (bookings || []).map((b: any) => ({
+      let mappedReceipts = (bookings || []).map((b: any) => ({
         id: b.receipt_number || b.id,
         bookingId: b.id,
         customer: b.sender_name || b.customer_name || 'N/A',
@@ -30,8 +34,18 @@ export default function AllReceipts() {
         paymentMode: b.payment_method?.replace('_', ' ')?.toUpperCase() || 'Cash',
         status: b.payment_method === 'credit' || b.payment_method === 'to_pay' ? 'pending' : 'paid',
         invoiceNumber: b.receipt_number || b.id,
-        receivers: b.receivers || []
+        receivers: b.receivers || [],
+        destination_depot_id: b.destination_depot_id,
+        origin_depot_id: b.origin_depot_id
       }));
+
+      // Filter for depot managers
+      if (assignedDepotId) {
+        mappedReceipts = mappedReceipts.filter((r: any) =>
+          r.destination_depot_id === assignedDepotId ||
+          r.origin_depot_id === assignedDepotId
+        );
+      }
 
       setReceipts(mappedReceipts);
     } catch (error) {

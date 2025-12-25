@@ -39,7 +39,11 @@ interface Route {
   revenue: number;
 }
 
-export default function Reports() {
+interface ReportsProps {
+  assignedDepotId?: string | null;
+}
+
+export default function Reports({ assignedDepotId }: ReportsProps) {
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [reportType, setReportType] = useState('bookings');
   const [isLoading, setIsLoading] = useState(true);
