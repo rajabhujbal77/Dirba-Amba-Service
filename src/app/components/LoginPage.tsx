@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { authApi } from '../utils/api';
 
 interface LoginPageProps {
-  onLogin: (role: 'owner' | 'booking_clerk' | 'depot_manager') => void;
+  onLogin: (role: 'owner' | 'booking_clerk' | 'depot_manager', depotId?: string | null) => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
@@ -19,13 +19,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError('');
 
     try {
-      // Authenticate and get user role from database
+      // Authenticate and get user role and depot from database
       const response = await authApi.signIn(email, password);
 
-      // Get user role from the response
+      // Get user role and assigned depot ID from the response
       const userRole = response.user?.role || 'owner';
+      const depotId = (response.user as any)?.assigned_depot_id || null;
 
-      onLogin(userRole as 'owner' | 'booking_clerk' | 'depot_manager');
+      onLogin(userRole as 'owner' | 'booking_clerk' | 'depot_manager', depotId);
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Invalid email or password. Please try again.');

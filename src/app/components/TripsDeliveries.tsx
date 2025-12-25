@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 
 interface TripsDeliveriesProps {
   userRole: 'owner' | 'booking_clerk' | 'depot_manager';
+  assignedDepotId?: string | null;
 }
 
 interface Trip {
@@ -36,7 +37,7 @@ interface Booking {
   receivers: any[];
 }
 
-export default function TripsDeliveries({ userRole }: TripsDeliveriesProps) {
+export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeliveriesProps) {
   const [activeTab, setActiveTab] = useState<'trips' | 'deliveries'>('trips');
   const [trips, setTrips] = useState<Trip[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -56,8 +57,27 @@ export default function TripsDeliveries({ userRole }: TripsDeliveriesProps) {
         bookingsApi.getAll(),
         depotsApi.getAll()
       ]);
-      setTrips(tripsRes.trips || []);
-      setBookings(bookingsRes.bookings || []);
+
+      const allTrips = tripsRes.trips || [];
+      const allBookings = bookingsRes.bookings || [];
+
+      // Filter data for depot managers based on assigned depot
+      const filteredTrips = userRole === 'depot_manager' && assignedDepotId
+        ? allTrips.filter((t: any) =>
+          t.origin_depot_id === assignedDepotId ||
+          t.destination_depot_id === assignedDepotId
+        )
+        : allTrips;
+
+      const filteredBookings = userRole === 'depot_manager' && assignedDepotId
+        ? allBookings.filter((b: any) =>
+          b.destination_depot_id === assignedDepotId ||
+          b.origin_depot_id === assignedDepotId
+        )
+        : allBookings;
+
+      setTrips(filteredTrips);
+      setBookings(filteredBookings);
       // Depots come ordered by their position/id - use index as order
       setDepots(depotsRes.depots || []);
     } catch (error) {
@@ -398,8 +418,8 @@ export default function TripsDeliveries({ userRole }: TripsDeliveriesProps) {
                       <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
                         <div
                           className={`h-2 rounded-full transition-all ${trip.delivered_bookings === trip.total_bookings
-                              ? 'bg-green-500'
-                              : 'bg-orange-500'
+                            ? 'bg-green-500'
+                            : 'bg-orange-500'
                             }`}
                           style={{ width: `${(trip.delivered_bookings / trip.total_bookings) * 100}%` }}
                         ></div>

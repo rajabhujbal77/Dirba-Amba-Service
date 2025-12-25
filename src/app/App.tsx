@@ -13,10 +13,12 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [userRole, setUserRole] = useState<'owner' | 'booking_clerk' | 'depot_manager'>('owner');
+  const [assignedDepotId, setAssignedDepotId] = useState<string | null>(null);
 
-  const handleLogin = (role: 'owner' | 'booking_clerk' | 'depot_manager') => {
+  const handleLogin = (role: 'owner' | 'booking_clerk' | 'depot_manager', depotId?: string | null) => {
     setIsLoggedIn(true);
     setUserRole(role);
+    setAssignedDepotId(depotId || null);
     setCurrentPage('dashboard');
   };
 
@@ -134,10 +136,10 @@ export default function App() {
 
         {/* Main Content */}
         <main className="flex-1">
-          {currentPage === 'dashboard' && <Dashboard userRole={userRole} />}
+          {currentPage === 'dashboard' && <Dashboard userRole={userRole} assignedDepotId={assignedDepotId} />}
           {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={setCurrentPage} />}
           {currentPage === 'trip_creation' && (userRole === 'owner' || userRole === 'booking_clerk') && <TripCreation />}
-          {currentPage === 'trips_deliveries' && <TripsDeliveries userRole={userRole} />}
+          {currentPage === 'trips_deliveries' && <TripsDeliveries userRole={userRole} assignedDepotId={assignedDepotId} />}
           {currentPage === 'reports' && (userRole === 'owner' || userRole === 'depot_manager') && <Reports />}
           {currentPage === 'receipts' && (userRole === 'owner' || userRole === 'depot_manager') && <AllReceipts />}
           {currentPage === 'credit_ledger' && (userRole === 'owner' || userRole === 'depot_manager') && <CreditLedger />}

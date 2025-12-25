@@ -3,9 +3,10 @@ import { bookingsApi, tripsApi } from '../utils/api';
 
 interface DashboardProps {
   userRole: 'owner' | 'booking_clerk' | 'depot_manager';
+  assignedDepotId?: string | null;
 }
 
-export default function Dashboard({ userRole }: DashboardProps) {
+export default function Dashboard({ userRole, assignedDepotId }: DashboardProps) {
   const [stats, setStats] = useState([
     { label: "Today's Bookings", value: '0', icon: '📝' },
     { label: "Today's Revenue", value: '₹0', icon: '💵' },
@@ -30,13 +31,28 @@ export default function Dashboard({ userRole }: DashboardProps) {
       const bookings = bookingsRes.bookings || [];
       const trips = tripsRes.trips || [];
 
+      // Filter data for depot managers based on assigned depot
+      const filteredBookings = userRole === 'depot_manager' && assignedDepotId
+        ? bookings.filter((b: any) =>
+          b.destination_depot_id === assignedDepotId ||
+          b.origin_depot_id === assignedDepotId
+        )
+        : bookings;
+
+      const filteredTrips = userRole === 'depot_manager' && assignedDepotId
+        ? trips.filter((t: any) =>
+          t.origin_depot_id === assignedDepotId ||
+          t.destination_depot_id === assignedDepotId
+        )
+        : trips;
+
       // Get today's date (start of day)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayTime = today.getTime();
 
       // Filter today's bookings
-      const todaysBookings = bookings.filter((b: any) => {
+      const todaysBookings = filteredBookings.filter((b: any) => {
         const bookingDate = new Date(b.created_at);
         bookingDate.setHours(0, 0, 0, 0);
         return bookingDate.getTime() === todayTime;
@@ -44,9 +60,9 @@ export default function Dashboard({ userRole }: DashboardProps) {
 
       // Calculate Stats
       const todaysBookingsCount = todaysBookings.length;
-      const totalTrips = trips.length;
-      const activeTrips = trips.filter((t: any) => t.status === 'in_transit' || t.status === 'loading').length;
-      const pendingDeliveries = bookings.filter((b: any) => b.status !== 'delivered').length;
+      const totalTrips = filteredTrips.length;
+      const activeTrips = filteredTrips.filter((t: any) => t.status === 'in_transit' || t.status === 'loading').length;
+      const pendingDeliveries = filteredBookings.filter((b: any) => b.status !== 'delivered').length;
 
       // Today's Revenue
       const todaysRevenue = todaysBookings.reduce((sum: number, b: any) => sum + (Number(b.total_amount) || 0), 0);
@@ -55,7 +71,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
         : `₹${todaysRevenue.toLocaleString('en-IN')}`;
 
       // Total Revenue (all bookings)
-      const totalRevenue = bookings.reduce((sum: number, b: any) => sum + (Number(b.total_amount) || 0), 0);
+      const totalRevenue = filteredBookings.reduce((sum: number, b: any) => sum + (Number(b.total_amount) || 0), 0);
       const formattedTotalRevenue = totalRevenue > 100000
         ? `₹${(totalRevenue / 100000).toFixed(1)}L`
         : `₹${totalRevenue.toLocaleString('en-IN')}`;
@@ -80,7 +96,7 @@ export default function Dashboard({ userRole }: DashboardProps) {
       }
 
       // Recent Bookings (Top 5)
-      setRecentBookings(bookings.slice(0, 5).map((b: any) => {
+      setRecentBookings(filteredBookings.slice(0, 5).map((b: any) => {
         // Calculate total packages from receivers
         const totalPackages = b.receivers?.reduce((sum: number, r: any) => {
           return sum + (r.packages?.reduce((pSum: number, p: any) => pSum + (p.quantity || 0), 0) || 0);
