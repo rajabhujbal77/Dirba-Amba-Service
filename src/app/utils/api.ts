@@ -565,6 +565,26 @@ export const depotRoutesApi = {
     return { routes: Array.from(groupedMap.values()) };
   },
 
+  async getByDepotId(depotId: string) {
+    const { data, error } = await supabase
+      .from('depot_routes')
+      .select(`
+        *,
+        origin_depot:origin_depot_id(name),
+        forwarding_depot:forwarding_depot_id(name)
+      `)
+      .eq('origin_depot_id', depotId);
+    if (error) throw error;
+
+    // Return list of forwarding depot IDs for this depot
+    const forwardingDepotIds = data.map(row => row.forwarding_depot_id);
+    return {
+      depotId,
+      forwardingDepotIds,
+      routes: data
+    };
+  },
+
   async create(data: any) {
     // data = { originDepotId: '...', forwardingDepotIds: ['...', '...'] }
     const inserts = data.forwardingDepotIds.map((fId: string) => ({
