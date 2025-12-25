@@ -36,8 +36,8 @@ export default function App() {
         <aside className="w-64 bg-white border-r border-gray-200 min-h-screen">
           <div className="p-6">
             <div className="flex items-center gap-2 mb-8">
-              <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold">🥭</span>
+              <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
+                <img src="/logo.png" alt="Mango Express Logo" className="w-full h-full object-contain p-1" />
               </div>
               <div>
                 <h1 className="font-bold text-gray-900">Mango Express</h1>
@@ -160,8 +160,8 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active
-          ? 'bg-orange-50 text-orange-600'
-          : 'text-gray-600 hover:bg-gray-50'
+        ? 'bg-orange-50 text-orange-600'
+        : 'text-gray-600 hover:bg-gray-50'
         }`}
     >
       <span>{icon}</span>
