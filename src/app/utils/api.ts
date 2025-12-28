@@ -456,6 +456,82 @@ export const tripsApi = {
     if (error) throw error;
     return { bookings: data || [] };
   },
+
+  /**
+   * Check if all managed depot deliveries for a trip are complete and auto-mark trip as completed.
+   * - Only counts bookings going to 'managed' type depots
+   * - Excludes 'pickup' delivery type bookings (tracked offline, not in scope)
+   * - If all qualifying bookings are delivered, marks trip as 'completed'
+   */
+  async checkAndAutoComplete(tripId: string) {
+    try {
+      // Get all bookings for this trip with their destination depot info
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          status,
+          delivery_type,
+          destination_depot_id,
+          depots!bookings_destination_depot_id_fkey (
+            id,
+            type
+          )
+        `)
+        .eq('trip_id', tripId);
+
+      if (bookingsError) {
+        console.error('Error checking trip bookings:', bookingsError);
+        return { autoCompleted: false };
+      }
+
+      if (!bookings || bookings.length === 0) {
+        return { autoCompleted: false };
+      }
+
+      // Filter to only managed depot deliveries (excluding pickups)
+      // Pickups are tracked offline and not counted for auto-completion
+      const managedDeliveries = bookings.filter((b: any) => {
+        const depot = b.depots;
+        const isManagedDepot = depot?.type === 'managed';
+        const isNotPickup = b.delivery_type !== 'pickup';
+        return isManagedDepot && isNotPickup;
+      });
+
+      // If no managed deliveries exist for this trip, nothing to auto-complete
+      if (managedDeliveries.length === 0) {
+        console.log(`[AutoComplete] Trip ${tripId}: No managed depot deliveries found`);
+        return { autoCompleted: false };
+      }
+
+      // Check if all managed deliveries are complete
+      const allDelivered = managedDeliveries.every((b: any) => b.status === 'delivered');
+      const deliveredCount = managedDeliveries.filter((b: any) => b.status === 'delivered').length;
+
+      console.log(`[AutoComplete] Trip ${tripId}: ${deliveredCount}/${managedDeliveries.length} managed deliveries complete`);
+
+      if (allDelivered) {
+        // All managed depot deliveries are complete - mark trip as completed
+        const { error: updateError } = await supabase
+          .from('trips')
+          .update({ status: 'completed' })
+          .eq('id', tripId);
+
+        if (updateError) {
+          console.error('Error auto-completing trip:', updateError);
+          return { autoCompleted: false };
+        }
+
+        console.log(`[AutoComplete] Trip ${tripId} auto-completed!`);
+        return { autoCompleted: true };
+      }
+
+      return { autoCompleted: false };
+    } catch (error) {
+      console.error('Error in checkAndAutoComplete:', error);
+      return { autoCompleted: false };
+    }
+  },
 };
 
 // Users
@@ -792,12 +868,12 @@ export const receiptsApi = {
 
 // Credit Ledger - Aggregates credit bookings and advance payments
 export const creditApi = {
-  // Get all credit bookings (payment_method = 'credit' or 'to_pay') with optional depot filter
+  // Get all credit bookings (payment_method = 'credit' only) with optional depot filter
   async getCreditBookings(depotId?: string | null) {
     let query = supabase
       .from('bookings_complete')
       .select('*')
-      .in('payment_method', ['credit', 'to_pay'])
+      .eq('payment_method', 'credit')
       .order('created_at', { ascending: false });
 
     if (depotId) {
@@ -817,8 +893,10 @@ export const creditApi = {
       .select('*')
       .order('payment_date', { ascending: false });
 
-    if (customerName && customerPhone) {
-      query = query.eq('customer_name', customerName).eq('customer_phone', customerPhone);
+    if (customerPhone) {
+      query = query.eq('customer_phone', customerPhone);
+    } else if (customerName) {
+      query = query.eq('customer_name', customerName);
     }
 
     const { data, error } = await query;
@@ -850,13 +928,13 @@ export const creditApi = {
     return { payment: data };
   },
 
-  // Get credit summary aggregated by sender with advance payments and optional depot filter
+  // Get credit summary aggregated by PHONE NUMBER (not name) with optional depot filter
   async getCreditSummary(depotId?: string | null) {
-    // Fetch credit bookings with depot filter
+    // Fetch credit bookings with depot filter (only 'credit' payment method)
     let bookingsQuery = supabase
       .from('bookings_complete')
       .select('*')
-      .in('payment_method', ['credit', 'to_pay'])
+      .eq('payment_method', 'credit')
       .order('created_at', { ascending: false });
 
     if (depotId) {
@@ -873,39 +951,76 @@ export const creditApi = {
       .select('*')
       .order('payment_date', { ascending: false });
 
+    // Fetch credit customer display names (if table exists)
+    const { data: creditCustomers } = await supabase
+      .from('credit_customers')
+      .select('phone, display_name');
+    const displayNameMap = new Map((creditCustomers || []).map((c: any) => [c.phone, c.display_name]));
+
     // If payments table doesn't exist yet, just use empty array
     const allPayments = paymentsError ? [] : (payments || []);
     const allBookings = bookings || [];
 
-    // Aggregate by sender_name only (normalized to lowercase for matching)
+    // Aggregate by PHONE NUMBER (not name) - this handles spelling variations
     const accountsMap = new Map<string, any>();
 
-    // Process bookings
+    // Process bookings - group by phone
     allBookings.forEach((b: any) => {
+      const phone = (b.sender_phone || '').trim();
+      if (!phone) return; // Skip bookings without phone
+
+      const key = phone;
       const name = (b.sender_name || 'Unknown').trim();
-      const key = name.toLowerCase();
 
       if (!accountsMap.has(key)) {
+        // Use display name from credit_customers if available, otherwise use first seen name
+        const displayName = displayNameMap.get(phone) || name;
         accountsMap.set(key, {
-          id: key,
-          customer: name,
-          phone: b.sender_phone || 'N/A',
+          id: phone, // Use phone as ID
+          customer: displayName,
+          phone: phone,
+          nameVariations: new Set([name]), // Track all name spellings
           totalCredit: 0,
           advancePaid: 0,
           netOutstanding: 0,
           lastPayment: null,
           bookings: [],
           payments: [],
-          bookingCount: 0
+          bookingCount: 0,
+          depots: new Set<string>(), // Track depots this customer shipped to
+          packageBreakdown: new Map<string, { depot: string; depotId: string; size: string; packageId: string; quantity: number; amount: number }>()
         });
       }
 
       const account = accountsMap.get(key);
       const amount = Number(b.total_amount) || 0;
 
-      // Update phone if account has N/A but booking has phone
-      if (account.phone === 'N/A' && b.sender_phone) {
-        account.phone = b.sender_phone;
+      // Track name variations
+      account.nameVariations.add(name);
+
+      // Track destination depot
+      if (b.destination_depot_id) {
+        account.depots.add(b.destination_depot_id);
+      }
+
+      // Track package breakdown for discount calculation
+      if (Array.isArray(b.package_details)) {
+        b.package_details.forEach((pkg: any) => {
+          const pkgKey = `${b.destination_depot_id}_${pkg.package_id || pkg.size}`;
+          if (!account.packageBreakdown.has(pkgKey)) {
+            account.packageBreakdown.set(pkgKey, {
+              depot: b.destination_depot_name || 'Unknown',
+              depotId: b.destination_depot_id,
+              size: pkg.size || pkg.name || 'Unknown',
+              packageId: pkg.package_id || '',
+              quantity: 0,
+              amount: 0
+            });
+          }
+          const breakdown = account.packageBreakdown.get(pkgKey);
+          breakdown.quantity += Number(pkg.quantity) || 0;
+          breakdown.amount += (Number(pkg.quantity) || 0) * (Number(pkg.price) || 0);
+        });
       }
 
       account.totalCredit += amount;
@@ -916,23 +1031,20 @@ export const creditApi = {
         amount: amount,
         date: b.created_at,
         status: b.status,
-        destination: b.destination_depot_name || 'N/A'
+        destination: b.destination_depot_name || 'N/A',
+        destinationDepotId: b.destination_depot_id,
+        packages: b.package_details || []
       });
     });
 
-    // Process payments - match by customer name only
+    // Process payments - match by phone number
     allPayments.forEach((p: any) => {
-      const name = (p.customer_name || 'Unknown').trim();
-      const key = name.toLowerCase();
+      const phone = (p.customer_phone || '').trim();
+      if (!phone) return;
 
-      if (accountsMap.has(key)) {
-        const account = accountsMap.get(key);
+      if (accountsMap.has(phone)) {
+        const account = accountsMap.get(phone);
         const amount = Number(p.amount) || 0;
-
-        // Update phone if we have it from payment
-        if (account.phone === 'N/A' && p.customer_phone) {
-          account.phone = p.customer_phone;
-        }
 
         account.advancePaid += amount;
         account.payments.push({
@@ -950,9 +1062,12 @@ export const creditApi = {
       }
     });
 
-    // Calculate net outstanding for each account
+    // Calculate net outstanding and convert Sets/Maps to arrays for each account
     accountsMap.forEach((account) => {
       account.netOutstanding = Math.max(0, account.totalCredit - account.advancePaid);
+      account.nameVariations = Array.from(account.nameVariations);
+      account.depots = Array.from(account.depots);
+      account.packageBreakdown = Array.from(account.packageBreakdown.values());
     });
 
     // Calculate totals
@@ -966,8 +1081,129 @@ export const creditApi = {
       totalAdvancePaid,
       totalNetOutstanding
     };
+  },
+
+  // Get or create credit customer record
+  async getCustomerByPhone(phone: string) {
+    const { data, error } = await supabase
+      .from('credit_customers')
+      .select('*')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    if (error && !error.message.includes('does not exist')) throw error;
+    return { customer: data };
+  },
+
+  // Update customer display name
+  async updateCustomerDisplayName(phone: string, displayName: string) {
+    const { data, error } = await supabase
+      .from('credit_customers')
+      .upsert({
+        phone: phone,
+        display_name: displayName
+      }, { onConflict: 'phone' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { customer: data };
+  },
+
+  // Get customer-specific pricing
+  async getCustomerPricing(phone: string) {
+    const { data, error } = await supabase
+      .from('credit_customer_pricing')
+      .select('*')
+      .eq('customer_phone', phone);
+
+    if (error && !error.message.includes('does not exist')) throw error;
+
+    return {
+      pricing: (data || []).map((p: any) => ({
+        packageId: p.package_id,
+        depotId: p.depot_id,
+        discountedPrice: p.discounted_price
+      }))
+    };
+  },
+
+  // Set customer-specific pricing (upsert multiple prices)
+  async setCustomerPricing(phone: string, pricing: { packageId: string; depotId: string; discountedPrice: number }[]) {
+    // Delete existing pricing for this customer
+    await supabase
+      .from('credit_customer_pricing')
+      .delete()
+      .eq('customer_phone', phone);
+
+    // Insert new pricing
+    if (pricing.length > 0) {
+      const inserts = pricing.map(p => ({
+        customer_phone: phone,
+        package_id: p.packageId,
+        depot_id: p.depotId,
+        discounted_price: p.discountedPrice
+      }));
+
+      const { error } = await supabase
+        .from('credit_customer_pricing')
+        .insert(inserts);
+
+      if (error) throw error;
+    }
+
+    return { success: true };
+  },
+
+  // Calculate discount summary for a customer
+  async getDiscountSummary(phone: string) {
+    // Get customer's bookings
+    const { data: bookings } = await supabase
+      .from('bookings_complete')
+      .select('*')
+      .eq('payment_method', 'credit')
+      .eq('sender_phone', phone);
+
+    // Get customer's custom pricing
+    const { pricing } = await this.getCustomerPricing(phone);
+    const pricingMap = new Map(pricing.map((p: any) => [`${p.packageId}_${p.depotId}`, p.discountedPrice]));
+
+    let originalTotal = 0;
+    let discountedTotal = 0;
+
+    (bookings || []).forEach((b: any) => {
+      if (Array.isArray(b.package_details)) {
+        b.package_details.forEach((pkg: any) => {
+          const quantity = Number(pkg.quantity) || 0;
+          const originalPrice = Number(pkg.price) || 0;
+          const originalAmount = quantity * originalPrice;
+          originalTotal += originalAmount;
+
+          // Check for custom pricing
+          const pricingKey = `${pkg.package_id}_${b.destination_depot_id}`;
+          const customPrice = pricingMap.get(pricingKey);
+
+          if (customPrice !== undefined) {
+            discountedTotal += quantity * customPrice;
+          } else {
+            discountedTotal += originalAmount; // No discount
+          }
+        });
+      }
+    });
+
+    const totalSavings = originalTotal - discountedTotal;
+    const savingsPercent = originalTotal > 0 ? (totalSavings / originalTotal) * 100 : 0;
+
+    return {
+      originalTotal,
+      discountedTotal,
+      totalSavings,
+      savingsPercent: Math.round(savingsPercent * 10) / 10
+    };
   }
 };
+
 
 // Backup
 export const backupApi = {

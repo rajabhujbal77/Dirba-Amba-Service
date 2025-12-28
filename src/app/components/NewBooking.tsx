@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 // jsPDF is dynamically imported when needed to reduce initial bundle size
 import { depotsApi, packagesApi, depotPricingApi, bookingsApi, seasonApi, contactsApi, receiptsApi } from '../utils/api';
 import ContactAutocomplete from './ContactAutocomplete';
@@ -247,6 +247,39 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
     }
   };
 
+  // Swipe gesture handling for mobile
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartX.current;
+    const deltaY = touchEndY - touchStartY.current;
+
+    // Only trigger if horizontal swipe is greater than vertical (not scrolling)
+    // and swipe distance is at least 50px
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+      if (deltaX < 0 && currentStep < 4) {
+        // Swipe left - go to next step
+        setCurrentStep(prev => Math.min(prev + 1, 4));
+      } else if (deltaX > 0 && currentStep > 1) {
+        // Swipe right - go to previous step
+        setCurrentStep(prev => Math.max(prev - 1, 1));
+      }
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
   const goToStep = (step: number) => setCurrentStep(step);
@@ -354,30 +387,78 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
         <p className="text-gray-600">Create a new mango transport booking</p>
       </div>
 
-      {/* Step Indicator */}
+      {/* Step Indicator with Swipe Navigation */}
       {currentStep <= 4 && (
-        <div className="mb-8 flex items-center justify-center gap-2">
-          {stepLabels.map((label, index) => (
-            <React.Fragment key={index}>
-              <div
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${currentStep === index + 1
-                  ? 'bg-orange-500 text-white'
-                  : currentStep > index + 1
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                  }`}
-              >
-                <span>{index + 1}</span>
-                <span className="hidden md:inline">{label}</span>
-              </div>
-              {index < 3 && <div className="w-8 h-0.5 bg-gray-200" />}
-            </React.Fragment>
-          ))}
+        <div className="mb-8">
+          {/* Mobile Navigation Arrows */}
+          <div className="flex items-center justify-center gap-4 mb-4 lg:hidden">
+            <button
+              onClick={prevStep}
+              disabled={currentStep === 1}
+              className={`p-3 rounded-full transition-colors touch-target ${currentStep === 1
+                ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                : 'bg-orange-100 text-orange-600 hover:bg-orange-200 active:bg-orange-300'
+                }`}
+              aria-label="Previous step"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">Step {currentStep} of 4</div>
+              <div className="text-sm text-gray-600">{stepLabels[currentStep - 1]}</div>
+            </div>
+
+            <button
+              onClick={nextStep}
+              disabled={currentStep === 4}
+              className={`p-3 rounded-full transition-colors touch-target ${currentStep === 4
+                ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                : 'bg-orange-100 text-orange-600 hover:bg-orange-200 active:bg-orange-300'
+                }`}
+              aria-label="Next step"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Desktop Step Indicator */}
+          <div className="hidden lg:flex items-center justify-center gap-2">
+            {stepLabels.map((label, index) => (
+              <React.Fragment key={index}>
+                <div
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${currentStep === index + 1
+                    ? 'bg-orange-500 text-white'
+                    : currentStep > index + 1
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-500'
+                    }`}
+                >
+                  <span>{index + 1}</span>
+                  <span>{label}</span>
+                </div>
+                {index < 3 && <div className="w-8 h-0.5 bg-gray-200" />}
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* Swipe hint for mobile */}
+          <p className="lg:hidden text-center text-xs text-gray-400 mt-2">
+            Swipe or use arrows to navigate
+          </p>
         </div>
       )}
 
-      {/* Form Steps */}
-      <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-4xl mx-auto">
+      {/* Form Steps - Swipe enabled on mobile */}
+      <div
+        className="bg-white rounded-xl border border-gray-200 p-8 max-w-4xl mx-auto"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {currentStep === 1 && (
           <Step1DepotPaymentDelivery
             formData={formData}
@@ -1081,24 +1162,45 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
     // Calculate center position for receivers list
     const receiverStartX = margin + 30;
     const packagesX = pageWidth - margin - 10;
+    const maxY = pageHeight - 40; // Leave space for total and footer
 
     formData?.receivers?.forEach((receiver: any, i: number) => {
-      // Receiver name and phone on LEFT
+      // Check if we need a new page before adding receiver
+      if (y > maxY) {
+        doc.addPage();
+        y = 15;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+      }
+
+      // Receiver name and phone
       const receiverText = `${i + 1}. ${receiver.name?.toUpperCase() || 'N/A'} (${receiver.phone || 'N/A'})`;
       doc.text(receiverText, receiverStartX, y);
+      y += 6;
 
-      // Packages on RIGHT (same line)
-      const packagesText = receiver.packages?.map((pkg: any) =>
-        `${pkg.size} × ${pkg.quantity} = ₹${(pkg.quantity * pkg.price).toFixed(0)}`
-      ).join(', ') || '';
-
-      if (packagesText) {
-        doc.text(packagesText, packagesX, y, { align: 'right' });
+      // Each package on its own line, right-aligned to match TOTAL
+      if (receiver.packages && receiver.packages.length > 0) {
+        doc.setFontSize(9);
+        receiver.packages.forEach((pkg: any) => {
+          // Check for page overflow before each package
+          if (y > maxY) {
+            doc.addPage();
+            y = 15;
+            doc.setFontSize(9);
+          }
+          const pkgText = `${pkg.size} × ${pkg.quantity} = ₹${(pkg.quantity * pkg.price).toFixed(0)}`;
+          doc.text(pkgText, pageWidth - margin - 10, y, { align: 'right' });
+          y += 5;
+        });
+        doc.setFontSize(10);
       }
-      y += 8;
 
       // Add address if home delivery (on next line, smaller)
       if (receiver.address) {
+        if (y > maxY) {
+          doc.addPage();
+          y = 15;
+        }
         doc.setFontSize(8);
         doc.setTextColor(100, 100, 100);
         doc.text(`Address: ${receiver.address}`, receiverStartX + 10, y);
@@ -1106,6 +1208,7 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
         doc.setFontSize(10);
         y += 6;
       }
+      y += 3; // Extra spacing between receivers
     });
 
     y += 5;

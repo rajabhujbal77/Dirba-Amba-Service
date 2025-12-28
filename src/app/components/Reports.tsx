@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { reportsApi } from '../utils/api';
+import { reportsApi, creditApi } from '../utils/api';
 import { jsPDF } from 'jspdf';
 
 interface BookingSummary {
@@ -39,6 +39,24 @@ interface Route {
   revenue: number;
 }
 
+interface CreditAccount {
+  id: string;
+  customer: string;
+  phone: string;
+  totalCredit: number;
+  advancePaid: number;
+  netOutstanding: number;
+  bookingCount: number;
+  lastPayment: string | null;
+}
+
+interface CreditSummary {
+  accounts: CreditAccount[];
+  totalCredit: number;
+  totalAdvancePaid: number;
+  totalNetOutstanding: number;
+}
+
 interface ReportsProps {
   assignedDepotId?: string | null;
 }
@@ -69,6 +87,12 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
 
   const [topCustomers, setTopCustomers] = useState<Customer[]>([]);
   const [topRoutes, setTopRoutes] = useState<Route[]>([]);
+  const [creditSummary, setCreditSummary] = useState<CreditSummary>({
+    accounts: [],
+    totalCredit: 0,
+    totalAdvancePaid: 0,
+    totalNetOutstanding: 0
+  });
 
   useEffect(() => {
     loadReportsData();
@@ -80,17 +104,19 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
       const fromDate = dateRange.from || undefined;
       const toDate = dateRange.to || undefined;
 
-      const [bookingRes, tripRes, customersRes, routesRes] = await Promise.all([
+      const [bookingRes, tripRes, customersRes, routesRes, creditRes] = await Promise.all([
         reportsApi.getBookingSummary(fromDate, toDate, assignedDepotId),
         reportsApi.getTripSummary(fromDate, toDate, assignedDepotId),
         reportsApi.getTopCustomers(5, fromDate, toDate, assignedDepotId),
-        reportsApi.getTopRoutes(5, fromDate, toDate, assignedDepotId)
+        reportsApi.getTopRoutes(5, fromDate, toDate, assignedDepotId),
+        creditApi.getCreditSummary(assignedDepotId)
       ]);
 
       setBookingSummary(bookingRes);
       setTripSummary(tripRes);
       setTopCustomers(customersRes.customers);
       setTopRoutes(routesRes.routes);
+      setCreditSummary(creditRes);
     } catch (error) {
       console.error('Error loading reports:', error);
     } finally {
@@ -288,6 +314,7 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
               <option value="trips">Trips Report</option>
               <option value="revenue">Revenue Report</option>
               <option value="customers">Customer Report</option>
+              <option value="credit">Credit Customers Report</option>
             </select>
           </div>
           <div>
@@ -490,6 +517,106 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
           </div>
         </div>
       </div>
+
+      {/* Credit Customers Report - Show when credit report type is selected */}
+      {reportType === 'credit' && (
+        <div className="mt-6">
+          {/* Credit Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-white rounded-xl p-6 border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Total Credit Issued</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(creditSummary.totalCredit)}</p>
+              <p className="text-xs text-gray-500 mt-1">{creditSummary.accounts.length} credit customers</p>
+            </div>
+            <div className="bg-white rounded-xl p-6 border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Advance Paid</p>
+              <p className="text-2xl font-bold text-green-600">{formatCurrency(creditSummary.totalAdvancePaid)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {creditSummary.totalCredit > 0
+                  ? `${Math.round((creditSummary.totalAdvancePaid / creditSummary.totalCredit) * 100)}% collected`
+                  : '0% collected'}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl p-6 border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Net Outstanding</p>
+              <p className="text-2xl font-bold text-orange-600">{formatCurrency(creditSummary.totalNetOutstanding)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {creditSummary.accounts.filter(a => a.netOutstanding > 0).length} customers with balance
+              </p>
+            </div>
+          </div>
+
+          {/* Credit Customers Table */}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="font-bold text-gray-900">Credit Customers</h2>
+              <p className="text-sm text-gray-500 mt-1">Customers with credit payment method bookings</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bookings</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Credit</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Outstanding</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {creditSummary.accounts.length > 0 ? (
+                    [...creditSummary.accounts]
+                      .sort((a, b) => b.netOutstanding - a.netOutstanding)
+                      .map((account) => (
+                        <tr key={account.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <p className="font-medium text-gray-900">{account.customer}</p>
+                              <p className="text-xs text-gray-500">{account.phone}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {account.bookingCount}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">
+                            {formatCurrency(account.totalCredit)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 font-medium">
+                            {formatCurrency(account.advancePaid)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-600 font-bold">
+                            {formatCurrency(account.netOutstanding)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${account.netOutstanding === 0
+                                ? 'bg-green-100 text-green-800'
+                                : account.totalCredit > 0 && (account.advancePaid / account.totalCredit) >= 0.5
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                              {account.netOutstanding === 0
+                                ? 'Cleared'
+                                : account.totalCredit > 0 && (account.advancePaid / account.totalCredit) >= 0.5
+                                  ? 'Partial'
+                                  : 'Pending'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                        No credit customers found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Export Button */}
       <div className="mt-6 flex justify-end gap-3">

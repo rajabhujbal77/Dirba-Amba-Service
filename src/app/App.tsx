@@ -21,6 +21,7 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [assignedDepotId, setAssignedDepotId] = useState<string | null>(null);
   const [depotInfo, setDepotInfo] = useState<any>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Initialize sync engine on mount
   useEffect(() => {
@@ -29,6 +30,12 @@ export default function App() {
       stopSyncEngine();
     };
   }, []);
+
+  // Close sidebar on page change (for mobile)
+  const handlePageChange = (page: string) => {
+    setCurrentPage(page);
+    setSidebarOpen(false); // Auto-close sidebar on navigation
+  };
 
   const handleLogin = async (role: string, id: string, depotId?: string | null) => {
     setIsLoggedIn(true);
@@ -55,6 +62,7 @@ export default function App() {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentPage('dashboard');
+    setSidebarOpen(false);
   };
 
   if (!isLoggedIn) {
@@ -67,17 +75,64 @@ export default function App() {
       <OfflineIndicator />
       {/* Conflict Resolution Modal */}
       <ConflictResolver />
+
+      {/* Mobile Header with Hamburger */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          aria-label="Open menu"
+        >
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
+            <img src="/logo.webp" alt="Logo" className="w-full h-full object-contain p-0.5" />
+          </div>
+          <span className="font-bold text-gray-900">Mango Express</span>
+        </div>
+        <div className="w-10" /> {/* Spacer for centering */}
+      </div>
+
+      {/* Mobile Sidebar Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-gray-200 min-h-screen">
+        {/* Sidebar - Hidden on mobile, shown as overlay when open */}
+        <aside className={`
+          fixed lg:relative inset-y-0 left-0 z-50
+          w-64 bg-white border-r border-gray-200 min-h-screen
+          transform transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
           <div className="p-6">
+            {/* Close button for mobile */}
+            <div className="lg:hidden flex justify-end mb-4">
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                aria-label="Close menu"
+              >
+                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 mb-8">
               <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
                 <img src="/logo.webp" alt="Mango Express Logo" className="w-full h-full object-contain p-1" />
               </div>
               <div>
                 <h1 className="font-bold text-gray-900">Mango Express</h1>
-                <p className="text-sm text-gray-500 capitalize">{userRole.replace('_', ' ')}</p>
+                <p className="text-sm text-gray-500 capitalize">{userRole?.replace('_', ' ')}</p>
               </div>
             </div>
 
@@ -87,7 +142,7 @@ export default function App() {
                 icon="📊"
                 label="Dashboard"
                 active={currentPage === 'dashboard'}
-                onClick={() => setCurrentPage('dashboard')}
+                onClick={() => handlePageChange('dashboard')}
               />
 
               {/* Booking Clerk & Admin have access */}
@@ -96,7 +151,7 @@ export default function App() {
                   icon="📝"
                   label="New Booking"
                   active={currentPage === 'new_booking'}
-                  onClick={() => setCurrentPage('new_booking')}
+                  onClick={() => handlePageChange('new_booking')}
                 />
               )}
 
@@ -107,7 +162,7 @@ export default function App() {
                     icon="🚚"
                     label={depotInfo?.forwarding_enabled ? 'Create Forwarding Trip' : 'Create Trip'}
                     active={currentPage === 'trip_creation'}
-                    onClick={() => setCurrentPage('trip_creation')}
+                    onClick={() => handlePageChange('trip_creation')}
                   />
                 )}
 
@@ -116,7 +171,7 @@ export default function App() {
                 icon="📦"
                 label="Trips & Deliveries"
                 active={currentPage === 'trips_deliveries'}
-                onClick={() => setCurrentPage('trips_deliveries')}
+                onClick={() => handlePageChange('trips_deliveries')}
               />
 
               {/* Only Admin & Depot Manager (financial access) */}
@@ -125,7 +180,7 @@ export default function App() {
                   icon="📈"
                   label="Reports"
                   active={currentPage === 'reports'}
-                  onClick={() => setCurrentPage('reports')}
+                  onClick={() => handlePageChange('reports')}
                 />
               )}
 
@@ -135,7 +190,7 @@ export default function App() {
                   icon="🧾"
                   label="All Receipts"
                   active={currentPage === 'receipts'}
-                  onClick={() => setCurrentPage('receipts')}
+                  onClick={() => handlePageChange('receipts')}
                 />
               )}
 
@@ -145,7 +200,7 @@ export default function App() {
                   icon="💳"
                   label="Credit Ledger"
                   active={currentPage === 'credit_ledger'}
-                  onClick={() => setCurrentPage('credit_ledger')}
+                  onClick={() => handlePageChange('credit_ledger')}
                 />
               )}
 
@@ -155,7 +210,7 @@ export default function App() {
                   icon="⚙️"
                   label="Settings"
                   active={currentPage === 'settings'}
-                  onClick={() => setCurrentPage('settings')}
+                  onClick={() => handlePageChange('settings')}
                 />
               )}
             </nav>
@@ -169,10 +224,10 @@ export default function App() {
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1">
+        {/* Main Content - Add top padding on mobile for fixed header */}
+        <main className="flex-1 pt-16 lg:pt-0">
           {currentPage === 'dashboard' && <Dashboard userRole={userRole} assignedDepotId={assignedDepotId} />}
-          {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={setCurrentPage} />}
+          {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={handlePageChange} />}
           {currentPage === 'trip_creation' && (userRole === 'owner' || userRole === 'booking_clerk' ||
             (userRole === 'depot_manager' && depotInfo?.forwarding_enabled)) && <TripCreation userRole={userRole} assignedDepotId={assignedDepotId} />}
           {currentPage === 'trips_deliveries' && <TripsDeliveries userRole={userRole} assignedDepotId={assignedDepotId} />}
@@ -198,7 +253,7 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors touch-target ${active
         ? 'bg-orange-50 text-orange-600'
         : 'text-gray-600 hover:bg-gray-50'
         }`}

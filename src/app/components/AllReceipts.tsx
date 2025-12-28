@@ -127,21 +127,39 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
       // Calculate center position for receivers list
       const receiverStartX = margin + 30;
       const packagesX = pageWidth - margin - 10;
+      const maxY = pageHeight - 40; // Leave space for total and footer
 
       receipt.receivers.forEach((r: any, i: number) => {
-        // Receiver name and phone on LEFT
+        // Check if we need a new page before adding receiver
+        if (y > maxY) {
+          doc.addPage();
+          y = 15;
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+        }
+
+        // Receiver name and phone
         const receiverText = `${i + 1}. ${r.name?.toUpperCase() || 'N/A'} (${r.phone || 'N/A'})`;
         doc.text(receiverText, receiverStartX, y);
+        y += 6;
 
-        // Packages on RIGHT (same line)
-        const packagesText = r.packages?.map((pkg: any) =>
-          `${pkg.size} × ${pkg.quantity} = ₹${(pkg.quantity * pkg.price_per_unit).toFixed(0)}`
-        ).join(', ') || '';
-
-        if (packagesText) {
-          doc.text(packagesText, packagesX, y, { align: 'right' });
+        // Each package on its own line, right-aligned to match TOTAL
+        if (r.packages && r.packages.length > 0) {
+          doc.setFontSize(9);
+          r.packages.forEach((pkg: any) => {
+            // Check for page overflow before each package
+            if (y > maxY) {
+              doc.addPage();
+              y = 15;
+              doc.setFontSize(9);
+            }
+            const pkgText = `${pkg.size} × ${pkg.quantity} = ₹${(pkg.quantity * pkg.price_per_unit).toFixed(0)}`;
+            doc.text(pkgText, pageWidth - margin - 10, y, { align: 'right' });
+            y += 5;
+          });
+          doc.setFontSize(10);
         }
-        y += 8;
+        y += 3; // Extra spacing between receivers
       });
     }
 

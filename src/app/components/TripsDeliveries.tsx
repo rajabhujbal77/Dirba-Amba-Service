@@ -39,6 +39,7 @@ interface Booking {
   payment_method: string;
   created_at: string;
   receivers: any[];
+  trip_id?: string;
 }
 
 export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeliveriesProps) {
@@ -126,10 +127,22 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
 
     if (isOnline) {
       try {
+        // First get the booking to know its trip_id
+        const booking = bookings.find(b => b.id === bookingId);
+        const tripId = booking?.trip_id || (booking as any)?.trip_id;
+
         if (paymentMethod) {
           await bookingsApi.update(bookingId, updates);
         } else {
           await bookingsApi.updateStatus(bookingId, 'delivered');
+        }
+
+        // Check if trip should auto-complete (all managed depot deliveries done)
+        if (tripId) {
+          const { autoCompleted } = await tripsApi.checkAndAutoComplete(tripId);
+          if (autoCompleted) {
+            console.log(`Trip ${tripId} auto-completed after all managed deliveries done`);
+          }
         }
 
         // Clear the payment method selection for this booking
