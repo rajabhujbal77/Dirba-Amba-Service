@@ -1031,6 +1031,7 @@ export const creditApi = {
         amount: amount,
         date: b.created_at,
         status: b.status,
+        origin: b.origin_depot_name || 'N/A',
         destination: b.destination_depot_name || 'N/A',
         destinationDepotId: b.destination_depot_id,
         packages: b.package_details || []

@@ -48,6 +48,8 @@ interface CreditAccount {
   netOutstanding: number;
   bookingCount: number;
   lastPayment: string | null;
+  bookings?: any[];
+  payments?: any[];
 }
 
 interface CreditSummary {
@@ -300,14 +302,16 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
         break;
 
       case 'credit':
-        csv = 'CREDIT CUSTOMERS REPORT\n';
+        csv = 'CREDIT CUSTOMERS DETAILED REPORT\n';
         csv += `${dateText}\n\n`;
         csv += 'SUMMARY\n';
         csv += `Total Credit Issued,${creditSummary.totalCredit}\n`;
         csv += `Total Advance Paid,${creditSummary.totalAdvancePaid}\n`;
         csv += `Total Outstanding,${creditSummary.totalNetOutstanding}\n`;
         csv += `Total Credit Customers,${creditSummary.accounts.length}\n\n`;
-        csv += 'CREDIT CUSTOMERS DETAILS\n';
+
+        // Customer summary section
+        csv += 'CUSTOMER SUMMARY\n';
         csv += 'Customer Name,Phone,Bookings,Total Credit,Advance Paid,Outstanding,Status\n';
         [...creditSummary.accounts]
           .sort((a, b) => b.netOutstanding - a.netOutstanding)
@@ -316,7 +320,49 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
               (account.advancePaid / account.totalCredit) >= 0.5 ? 'Partial' : 'Pending';
             csv += `"${account.customer}",${account.phone},${account.bookingCount},${account.totalCredit},${account.advancePaid},${account.netOutstanding},${status}\n`;
           });
-        filename = 'Credit_Customers_Report';
+        csv += '\n';
+
+        // Detailed bookings section
+        csv += 'DETAILED BOOKINGS\n';
+        csv += 'Customer Name,Phone,Receipt No,Date,Origin,Destination,Package,Qty,Rate,Amount,Payment Method\n';
+        [...creditSummary.accounts]
+          .sort((a, b) => b.netOutstanding - a.netOutstanding)
+          .forEach((account) => {
+            if (account.bookings && account.bookings.length > 0) {
+              account.bookings.forEach((booking: any) => {
+                const bookingDate = booking.date ? new Date(booking.date).toLocaleDateString('en-IN') : '-';
+                const origin = booking.origin || '-';
+                const destination = booking.destination || '-';
+
+                // If booking has package details, output each package as a row
+                if (booking.packages && booking.packages.length > 0) {
+                  booking.packages.forEach((pkg: any) => {
+                    csv += `"${account.customer}",${account.phone},${booking.receiptNumber || '-'},${bookingDate},"${origin}","${destination}",${pkg.size || '-'},${pkg.quantity || 0},${pkg.price || 0},${(pkg.quantity || 0) * (pkg.price || 0)},credit\n`;
+                  });
+                } else {
+                  // No package details, output as single row
+                  csv += `"${account.customer}",${account.phone},${booking.receiptNumber || '-'},${bookingDate},"${origin}","${destination}",-,-,-,${booking.amount || 0},credit\n`;
+                }
+              });
+            }
+          });
+        csv += '\n';
+
+        // Advance payments section
+        csv += 'ADVANCE PAYMENTS\n';
+        csv += 'Customer Name,Phone,Receipt No,Date,Amount,Payment Method,Notes\n';
+        [...creditSummary.accounts]
+          .sort((a, b) => b.netOutstanding - a.netOutstanding)
+          .forEach((account) => {
+            if (account.payments && account.payments.length > 0) {
+              account.payments.forEach((payment: any) => {
+                const paymentDate = payment.date ? new Date(payment.date).toLocaleDateString('en-IN') : '-';
+                csv += `"${account.customer}",${account.phone},${payment.receiptNumber || '-'},${paymentDate},${payment.amount || 0},${payment.method || 'cash'},"${payment.notes || ''}"\n`;
+              });
+            }
+          });
+
+        filename = 'Credit_Customers_Detailed_Report';
         break;
 
       default:
