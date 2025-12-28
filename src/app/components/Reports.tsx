@@ -230,54 +230,105 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
   };
 
   const exportToExcel = () => {
-    // Create CSV content
-    let csv = 'DRT Mango Transport - Reports\n\n';
-
-    // Booking Summary
-    csv += 'BOOKING SUMMARY\n';
-    csv += `Total Bookings,${bookingSummary.totalBookings}\n`;
-    csv += `Delivered,${bookingSummary.deliveredCount}\n`;
-    csv += `In Transit,${bookingSummary.inTransitCount}\n`;
-    csv += `Booked (Pending),${bookingSummary.bookedCount}\n`;
-    csv += `Total Revenue,${bookingSummary.totalRevenue}\n`;
-    csv += `Total Packages,${bookingSummary.totalPackages}\n\n`;
-
-    // Trip Summary
-    csv += 'TRIP SUMMARY\n';
-    csv += `Total Trips,${tripSummary.totalTrips}\n`;
-    csv += `Completed,${tripSummary.completedTrips}\n`;
-    csv += `Active,${tripSummary.activeTrips}\n`;
-    csv += `Total Trip Cost,${tripSummary.totalTripCost}\n\n`;
-
-    // Revenue by Method
-    csv += 'REVENUE BY PAYMENT METHOD\n';
-    csv += `Cash,${bookingSummary.revenueByMethod.cash}\n`;
-    csv += `Online,${bookingSummary.revenueByMethod.online}\n`;
-    csv += `To Pay,${bookingSummary.revenueByMethod.to_pay}\n`;
-    csv += `Credit,${bookingSummary.revenueByMethod.credit}\n\n`;
-
-    // Top Customers
-    csv += 'TOP CUSTOMERS\n';
-    csv += 'Rank,Name,Phone,Bookings,Revenue\n';
-    topCustomers.forEach((c, i) => {
-      csv += `${i + 1},"${c.name}",${c.phone},${c.bookings},${c.revenue}\n`;
-    });
-    csv += '\n';
-
-    // Top Routes - Replace → with 'to' for Excel compatibility
-    csv += 'TOP ROUTES\n';
-    csv += 'Rank,Route,Bookings,Revenue\n';
-    topRoutes.forEach((r, i) => {
-      const routeClean = r.route.replace(/→/g, 'to');
-      csv += `${i + 1},"${routeClean}",${r.trips},${r.revenue}\n`;
-    });
-
     // Add UTF-8 BOM for Excel to recognize encoding
     const BOM = '\uFEFF';
+    let csv = '';
+    let filename = 'DRT_Report';
+
+    const dateText = dateRange.from && dateRange.to
+      ? `Period: ${dateRange.from} to ${dateRange.to}`
+      : 'Period: All Time';
+
+    switch (reportType) {
+      case 'bookings':
+        csv = 'BOOKINGS REPORT\n';
+        csv += `${dateText}\n\n`;
+        csv += 'BOOKING SUMMARY\n';
+        csv += `Total Bookings,${bookingSummary.totalBookings}\n`;
+        csv += `Delivered,${bookingSummary.deliveredCount}\n`;
+        csv += `In Transit,${bookingSummary.inTransitCount}\n`;
+        csv += `Booked (Pending),${bookingSummary.bookedCount}\n`;
+        csv += `Total Packages,${bookingSummary.totalPackages}\n`;
+        csv += `Total Revenue,${bookingSummary.totalRevenue}\n`;
+        filename = 'Bookings_Report';
+        break;
+
+      case 'trips':
+        csv = 'TRIPS REPORT\n';
+        csv += `${dateText}\n\n`;
+        csv += 'TRIP SUMMARY\n';
+        csv += `Total Trips,${tripSummary.totalTrips}\n`;
+        csv += `Completed,${tripSummary.completedTrips}\n`;
+        csv += `Active,${tripSummary.activeTrips}\n`;
+        csv += `Pending,${tripSummary.pendingTrips}\n`;
+        csv += `Total Trip Cost,${tripSummary.totalTripCost}\n`;
+        filename = 'Trips_Report';
+        break;
+
+      case 'revenue':
+        csv = 'REVENUE REPORT\n';
+        csv += `${dateText}\n\n`;
+        csv += 'TOTAL REVENUE\n';
+        csv += `Total Revenue,${bookingSummary.totalRevenue}\n`;
+        csv += `Total Trip Cost,${tripSummary.totalTripCost}\n`;
+        csv += `Net Profit,${bookingSummary.totalRevenue - tripSummary.totalTripCost}\n\n`;
+        csv += 'REVENUE BY PAYMENT METHOD\n';
+        csv += 'Payment Method,Amount\n';
+        csv += `Cash,${bookingSummary.revenueByMethod.cash}\n`;
+        csv += `Online,${bookingSummary.revenueByMethod.online}\n`;
+        csv += `To Pay,${bookingSummary.revenueByMethod.to_pay}\n`;
+        csv += `Credit,${bookingSummary.revenueByMethod.credit}\n`;
+        filename = 'Revenue_Report';
+        break;
+
+      case 'customers':
+        csv = 'CUSTOMER REPORT\n';
+        csv += `${dateText}\n\n`;
+        csv += 'TOP CUSTOMERS\n';
+        csv += 'Rank,Customer Name,Phone,Total Bookings,Total Revenue\n';
+        topCustomers.forEach((c, i) => {
+          csv += `${i + 1},"${c.name}",${c.phone},${c.bookings},${c.revenue}\n`;
+        });
+        csv += '\n';
+        csv += 'TOP ROUTES\n';
+        csv += 'Rank,Route,Total Bookings,Total Revenue\n';
+        topRoutes.forEach((r, i) => {
+          const routeClean = r.route.replace(/→/g, 'to');
+          csv += `${i + 1},"${routeClean}",${r.trips},${r.revenue}\n`;
+        });
+        filename = 'Customer_Report';
+        break;
+
+      case 'credit':
+        csv = 'CREDIT CUSTOMERS REPORT\n';
+        csv += `${dateText}\n\n`;
+        csv += 'SUMMARY\n';
+        csv += `Total Credit Issued,${creditSummary.totalCredit}\n`;
+        csv += `Total Advance Paid,${creditSummary.totalAdvancePaid}\n`;
+        csv += `Total Outstanding,${creditSummary.totalNetOutstanding}\n`;
+        csv += `Total Credit Customers,${creditSummary.accounts.length}\n\n`;
+        csv += 'CREDIT CUSTOMERS DETAILS\n';
+        csv += 'Customer Name,Phone,Bookings,Total Credit,Advance Paid,Outstanding,Status\n';
+        [...creditSummary.accounts]
+          .sort((a, b) => b.netOutstanding - a.netOutstanding)
+          .forEach((account) => {
+            const status = account.netOutstanding === 0 ? 'Cleared' :
+              (account.advancePaid / account.totalCredit) >= 0.5 ? 'Partial' : 'Pending';
+            csv += `"${account.customer}",${account.phone},${account.bookingCount},${account.totalCredit},${account.advancePaid},${account.netOutstanding},${status}\n`;
+          });
+        filename = 'Credit_Customers_Report';
+        break;
+
+      default:
+        csv = 'DRT Mango Transport - Reports\n\n';
+        csv += `${dateText}\n`;
+        filename = 'DRT_Report';
+    }
+
     const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `DRT_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
