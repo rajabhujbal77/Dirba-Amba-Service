@@ -198,9 +198,9 @@ export default function CreditLedger({ assignedDepotId }: CreditLedgerProps) {
 
     // Summary
     rows.push(['SUMMARY']);
-    rows.push(['Total Credit', `₹${account.totalCredit.toLocaleString('en-IN')}`]);
-    rows.push(['Advance Paid', `₹${account.advancePaid.toLocaleString('en-IN')}`]);
-    rows.push(['Net Outstanding', `₹${account.netOutstanding.toLocaleString('en-IN')}`]);
+    rows.push(['Total Credit', account.totalCredit]);
+    rows.push(['Advance Paid', account.advancePaid]);
+    rows.push(['Net Outstanding', account.netOutstanding]);
     rows.push([]);
 
     // Bookings
@@ -211,7 +211,7 @@ export default function CreditLedger({ assignedDepotId }: CreditLedgerProps) {
         new Date(b.date).toLocaleDateString('en-IN'),
         b.receiptNumber || b.id,
         b.destination,
-        `₹${b.amount.toLocaleString('en-IN')}`
+        b.amount
       ]);
     });
     rows.push([]);
@@ -224,17 +224,18 @@ export default function CreditLedger({ assignedDepotId }: CreditLedgerProps) {
         new Date(p.date).toLocaleDateString('en-IN'),
         p.receiptNumber || '-',
         p.method || 'cash',
-        `₹${p.amount.toLocaleString('en-IN')}`
+        p.amount
       ]);
     });
 
-    // Convert to CSV string
+    // Convert to CSV string with UTF-8 BOM for Excel compatibility
     const csvContent = rows.map(row =>
       row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')
     ).join('\n');
 
-    // Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Add UTF-8 BOM for Excel to recognize encoding
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `Credit_Ledger_${account.customer.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;

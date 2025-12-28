@@ -619,7 +619,105 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
       {/* Deliveries View */}
       {activeTab === 'deliveries' && (
         <div className="bg-white rounded-xl border border-gray-200">
-          <div className="overflow-x-auto">
+          {/* Mobile Card Layout (visible on small screens) */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {deliveryBookings.length > 0 ? deliveryBookings.map((booking) => (
+              <div key={booking.id} className="p-4">
+                {/* Header: Receipt + Status */}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-bold text-gray-900">{booking.receipt_number}</p>
+                    <p className="text-xs text-gray-500">{formatDate(booking.created_at)}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
+                    {booking.status?.replace('_', ' ')}
+                  </span>
+                </div>
+
+                {/* Sender Info */}
+                <div className="mb-2">
+                  <p className="text-sm font-medium text-gray-900">{booking.sender_name}</p>
+                  <p className="text-xs text-gray-500">{booking.sender_phone}</p>
+                </div>
+
+                {/* Route + Details */}
+                <div className="flex items-center justify-between text-sm mb-3 p-2 bg-gray-50 rounded">
+                  <span className="text-gray-600">{booking.origin_depot_name} → {booking.destination_depot_name}</span>
+                  <span className="font-medium text-gray-900">{getPackageCount(booking)} pkgs</span>
+                </div>
+
+                {/* Amount + Payment Method */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-lg font-bold text-green-600">₹{(Number(booking.total_amount) || 0).toLocaleString('en-IN')}</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${booking.payment_method === 'cash' ? 'bg-green-100 text-green-700' :
+                      booking.payment_method === 'online' ? 'bg-purple-100 text-purple-700' :
+                        booking.payment_method === 'credit' ? 'bg-yellow-100 text-yellow-700' :
+                          booking.payment_method === 'to_pay' ? 'bg-orange-100 text-orange-700' :
+                            'bg-gray-100 text-gray-700'
+                    }`}>
+                    {booking.payment_method === 'cash' ? 'Cash' :
+                      booking.payment_method === 'online' ? 'Online' :
+                        booking.payment_method === 'credit' ? 'Credit' :
+                          booking.payment_method === 'to_pay' ? 'To-Pay' :
+                            booking.payment_method || 'N/A'}
+                  </span>
+                </div>
+
+                {/* Pending sync indicator */}
+                {pendingDeliveries.has(booking.id) && (
+                  <div className="mb-2 text-xs text-amber-600 flex items-center gap-1">
+                    <span className="animate-pulse">⏳</span> Pending sync
+                  </div>
+                )}
+
+                {/* ACTION BUTTON - Prominent on mobile */}
+                {booking.status === 'in_transit' && booking.payment_method === 'to_pay' ? (
+                  <div className="flex flex-col gap-2">
+                    <select
+                      value={toPayCollectionMethods[booking.id] || ''}
+                      onChange={(e) => setToPayCollectionMethods({
+                        ...toPayCollectionMethods,
+                        [booking.id]: e.target.value
+                      })}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Select Payment Method</option>
+                      <option value="cash">Cash</option>
+                      <option value="online">Online/UPI</option>
+                    </select>
+                    <button
+                      onClick={() => handleMarkDelivered(booking.id, toPayCollectionMethods[booking.id])}
+                      disabled={!toPayCollectionMethods[booking.id]}
+                      className={`w-full py-3 rounded-lg font-medium text-center ${toPayCollectionMethods[booking.id]
+                          ? 'bg-green-500 text-white hover:bg-green-600'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                    >
+                      {!isOnline ? '📤 Mark Delivered (Offline)' : '✓ Mark Delivered'}
+                    </button>
+                  </div>
+                ) : booking.status === 'in_transit' ? (
+                  <button
+                    onClick={() => handleMarkDelivered(booking.id)}
+                    className="w-full py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600"
+                  >
+                    {!isOnline ? '📤 Mark Delivered (Offline)' : '✓ Mark Delivered'}
+                  </button>
+                ) : booking.status === 'delivered' ? (
+                  <div className="w-full py-3 bg-green-100 text-green-700 rounded-lg font-medium text-center">
+                    ✓ Delivered {pendingDeliveries.has(booking.id) && '(syncing...)'}
+                  </div>
+                ) : null}
+              </div>
+            )) : (
+              <div className="p-12 text-center text-gray-500">
+                No deliveries found
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table Layout (hidden on mobile) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -740,7 +838,7 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                       No deliveries found
                     </td>
                   </tr>
