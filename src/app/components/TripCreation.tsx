@@ -53,6 +53,10 @@ export default function TripCreation({ userRole, assignedDepotId }: TripCreation
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [forwardingDestinations, setForwardingDestinations] = useState<string[]>([]);
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
+  // Indian mobile number validation: 10 digits starting with 6, 7, 8, or 9
+  const validatePhone = (phone: string) => /^[6-9]\d{9}$/.test(phone);
 
   // Check for draft on mount
   useEffect(() => {
@@ -154,6 +158,13 @@ export default function TripCreation({ userRole, assignedDepotId }: TripCreation
       alert('Please fill in all required fields.');
       return;
     }
+
+    // Validate Indian mobile number format
+    if (!validatePhone(formData.driverPhone)) {
+      setPhoneError('Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)');
+      return;
+    }
+    setPhoneError(null);
 
     setIsSubmitting(true);
     try {
@@ -458,12 +469,22 @@ export default function TripCreation({ userRole, assignedDepotId }: TripCreation
                   name="driverPhone"
                   type="tel"
                   value={formData.driverPhone}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="10-digit number"
+                  onChange={(e) => {
+                    // Only allow digits
+                    const value = e.target.value.replace(/\D/g, '');
+                    setFormData({ ...formData, driverPhone: value });
+                    // Clear error when user starts typing
+                    if (phoneError) setPhoneError(null);
+                  }}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${phoneError ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  placeholder="10-digit number (e.g., 9876543210)"
                   maxLength={10}
                   required
                 />
+                {phoneError && (
+                  <p className="mt-1 text-sm text-red-600">{phoneError}</p>
+                )}
               </div>
 
               <div>
