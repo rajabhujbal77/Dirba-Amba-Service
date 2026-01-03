@@ -121,7 +121,7 @@ export default function App() {
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
             <img src="/logo.webp" alt="Logo" className="w-full h-full object-contain p-0.5" />
           </div>
-          <span className="font-bold text-gray-900">Mango Express</span>
+          <span className="font-bold text-gray-900">Dirba Amba Service</span>
         </div>
         <div className="w-10" /> {/* Spacer for centering */}
       </div>
@@ -158,10 +158,10 @@ export default function App() {
 
             <div className="flex items-center gap-2 mb-8">
               <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
-                <img src="/logo.webp" alt="Mango Express Logo" className="w-full h-full object-contain p-1" />
+                <img src="/logo.webp" alt="Dirba Amba Service Logo" className="w-full h-full object-contain p-1" />
               </div>
               <div>
-                <h1 className="font-bold text-gray-900">Mango Express</h1>
+                <h1 className="font-bold text-gray-900">Dirba Amba Service</h1>
                 <p className="text-sm text-gray-500 capitalize">{userRole?.replace('_', ' ')}</p>
               </div>
             </div>

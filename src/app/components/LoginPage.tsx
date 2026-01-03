@@ -43,9 +43,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-green-600 rounded-2xl mb-4 overflow-hidden">
-              <img src="/logo.webp" alt="Mango Express Logo" className="w-full h-full object-contain p-2" />
+              <img src="/logo.webp" alt="Dirba Amba Service Logo" className="w-full h-full object-contain p-2" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Mango Express</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Dirba Amba Service</h1>
             <p className="text-gray-600">Seasonal Transport Management</p>
           </div>
 
