@@ -82,7 +82,7 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('DRT MANGO TRANSPORT', pageWidth / 2, y, { align: 'center' });
+    doc.text('DIRBA AMBA SERVICE', pageWidth / 2, y, { align: 'center' });
     y += 5;
 
     // Address line
@@ -234,7 +234,7 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text('Thank you for choosing DRT Mango Transport!', pageWidth / 2, y, { align: 'center' });
+    doc.text('Thank you for choosing Dirba Amba Service!', pageWidth / 2, y, { align: 'center' });
     doc.setTextColor(0, 0, 0);
     y += 12;
 
@@ -485,7 +485,7 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
             </div>
 
             <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold text-orange-500">DRT MANGO TRANSPORT</h3>
+              <h3 className="text-2xl font-bold text-orange-500">DIRBA AMBA SERVICE</h3>
               <p className="text-lg font-medium mt-2">{selectedReceipt.id}</p>
               <p className="text-sm text-gray-600">{new Date(selectedReceipt.date).toLocaleDateString('en-IN')}</p>
             </div>

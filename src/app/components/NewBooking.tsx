@@ -384,7 +384,7 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">New Booking</h1>
-        <p className="text-gray-600">Create a new mango transport booking</p>
+        <p className="text-gray-600">Create a new transport booking</p>
       </div>
 
       {/* Step Indicator with Swipe Navigation */}
@@ -1069,7 +1069,7 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
 
   const generateReceiptText = () => {
     const lines = [
-      `🥭 DRT MANGO TRANSPORT`,
+      `🥭 DIRBA AMBA SERVICE`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
       `Receipt: ${receiptNumber}`,
       `Date: ${new Date().toLocaleDateString('en-IN')}`,
@@ -1092,7 +1092,7 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
 
     lines.push(`\n━━━━━━━━━━━━━━━━━━━━━━`);
     lines.push(`💰 TOTAL: ₹${calculateTotal().toFixed(2)}`);
-    lines.push(`\nThank you for choosing DRT Mango Transport! 🥭`);
+    lines.push(`\nThank you for choosing Dirba Amba Service! 🥭`);
 
     return lines.join('\n');
   };
@@ -1116,7 +1116,7 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('DRT MANGO TRANSPORT', pageWidth / 2, y, { align: 'center' });
+    doc.text('DIRBA AMBA SERVICE', pageWidth / 2, y, { align: 'center' });
     y += 5;
 
     // Address line
@@ -1290,7 +1290,7 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text('Thank you for choosing DRT Mango Transport!', pageWidth / 2, y, { align: 'center' });
+    doc.text('Thank you for choosing Dirba Amba Service!', pageWidth / 2, y, { align: 'center' });
     doc.setTextColor(0, 0, 0);
     y += 12;
 
@@ -1358,7 +1358,7 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
         <>
           <div className="text-6xl">✅</div>
           <h2 className="text-3xl font-bold text-gray-900">Booking Created Successfully!</h2>
-          <p className="text-gray-600">Your mango transport booking has been confirmed</p>
+          <p className="text-gray-600">Your transport booking has been confirmed</p>
 
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 max-w-md mx-auto">
             <p className="text-sm text-gray-600 mb-2">Receipt Number</p>

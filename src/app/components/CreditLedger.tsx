@@ -252,7 +252,7 @@ export default function CreditLedger({ assignedDepotId }: CreditLedgerProps) {
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(247, 137, 30);
-    doc.text('DRT MANGO TRANSPORT', pageWidth / 2, y, { align: 'center' });
+    doc.text('DIRBA AMBA SERVICE', pageWidth / 2, y, { align: 'center' });
     y += 10;
     doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);

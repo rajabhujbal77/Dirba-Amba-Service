@@ -247,7 +247,7 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
     y += 8;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.text('DRT Mango Transport', pageWidth / 2, y, { align: 'center' });
+    doc.text('Dirba Amba Service', pageWidth / 2, y, { align: 'center' });
     y += 12;
 
     // Trip Info

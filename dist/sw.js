@@ -66,6 +66,20 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // Skip development mode requests (Vite HMR, source files, etc.)
+    if (
+        url.hostname === 'localhost' ||
+        url.hostname === '127.0.0.1' ||
+        url.pathname.endsWith('.tsx') ||
+        url.pathname.endsWith('.ts') ||
+        url.pathname.endsWith('.jsx') ||
+        url.pathname.includes('/@') ||
+        url.pathname.includes('/node_modules/') ||
+        url.pathname.includes('?') // Skip requests with query params (Vite cache busting)
+    ) {
+        return;
+    }
+
     // Skip API requests (Supabase) - always go to network
     if (url.hostname.includes('supabase.co') || url.pathname.startsWith('/api/')) {
         return;

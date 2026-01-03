@@ -147,7 +147,7 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
     // Title
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('DRT Mango Transport - Reports', pageWidth / 2, y, { align: 'center' });
+    doc.text('Dirba Amba Service - Reports', pageWidth / 2, y, { align: 'center' });
     y += 10;
 
     // Date range
@@ -368,7 +368,7 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
         break;
 
       default:
-        csv = 'DRT Mango Transport - Reports\n\n';
+        csv = 'Dirba Amba Service - Reports\n\n';
         csv += `${dateText}\n`;
         filename = 'DRT_Report';
     }
