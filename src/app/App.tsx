@@ -19,6 +19,9 @@ import OfflineIndicator from './components/OfflineIndicator';
 import ConflictResolver from './components/ConflictResolver';
 import { startSyncEngine, stopSyncEngine } from './utils/syncEngine';
 
+// User role type
+type UserRole = 'owner' | 'booking_clerk' | 'depot_manager';
+
 // Loading fallback component
 function PageLoader() {
   return (
@@ -34,7 +37,7 @@ function PageLoader() {
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [assignedDepotId, setAssignedDepotId] = useState<string | null>(null);
   const [depotInfo, setDepotInfo] = useState<any>(null);
@@ -54,7 +57,7 @@ export default function App() {
     setSidebarOpen(false); // Auto-close sidebar on navigation
   };
 
-  const handleLogin = async (role: string, id: string, depotId?: string | null) => {
+  const handleLogin = async (role: UserRole, id: string, depotId?: string | null) => {
     setIsLoggedIn(true);
     setUserRole(role);
     setUserId(id);
@@ -119,7 +122,7 @@ export default function App() {
         </button>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
-            <img src="/logo.webp" alt="Logo" className="w-full h-full object-contain p-0.5" />
+            <img src="/Logo.svg" alt="Logo" className="w-full h-full object-contain p-0.5" />
           </div>
           <span className="font-bold text-gray-900">Dirba Amba Service</span>
         </div>
@@ -158,7 +161,7 @@ export default function App() {
 
             <div className="flex items-center gap-2 mb-8">
               <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center overflow-hidden">
-                <img src="/logo.webp" alt="Dirba Amba Service Logo" className="w-full h-full object-contain p-1" />
+                <img src="/Logo.svg" alt="Dirba Amba Service Logo" className="w-full h-full object-contain p-1" />
               </div>
               <div>
                 <h1 className="font-bold text-gray-900">Dirba Amba Service</h1>
@@ -257,11 +260,11 @@ export default function App() {
         {/* Main Content - Add top padding on mobile for fixed header */}
         <main className="flex-1 pt-16 lg:pt-0">
           <Suspense fallback={<PageLoader />}>
-            {currentPage === 'dashboard' && <Dashboard userRole={userRole} assignedDepotId={assignedDepotId} />}
+            {currentPage === 'dashboard' && userRole && <Dashboard userRole={userRole} assignedDepotId={assignedDepotId} />}
             {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={handlePageChange} />}
             {currentPage === 'trip_creation' && (userRole === 'owner' || userRole === 'booking_clerk' ||
               (userRole === 'depot_manager' && depotInfo?.forwarding_enabled)) && <TripCreation userRole={userRole} assignedDepotId={assignedDepotId} />}
-            {currentPage === 'trips_deliveries' && <TripsDeliveries userRole={userRole} assignedDepotId={assignedDepotId} />}
+            {currentPage === 'trips_deliveries' && userRole && <TripsDeliveries userRole={userRole} assignedDepotId={assignedDepotId} />}
             {currentPage === 'reports' && userRole === 'owner' && <Reports assignedDepotId={assignedDepotId} />}
             {currentPage === 'reports' && userRole === 'depot_manager' && assignedDepotId && <DepotReports assignedDepotId={assignedDepotId} />}
             {currentPage === 'receipts' && (userRole === 'owner' || userRole === 'depot_manager') && <AllReceipts assignedDepotId={assignedDepotId} />}

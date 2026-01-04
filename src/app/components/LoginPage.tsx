@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { authApi } from '../utils/api';
 
+// User role type - must match the type in App.tsx
+type UserRole = 'owner' | 'booking_clerk' | 'depot_manager';
+
 interface LoginPageProps {
-  onLogin: (role: string, userId: string, depotId?: string | null) => void;
+  onLogin: (role: UserRole, userId: string, depotId?: string | null) => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
@@ -23,7 +26,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const response = await authApi.signIn(email, password);
 
       // Get user role, ID, and assigned depot ID from the response
-      const userRole = response.user?.role || 'owner';
+      const userRole = (response.user?.role || 'owner') as UserRole;
       const userId = response.user?.id || '';
       const depotId = (response.user as any)?.assigned_depot_id || null;
 
@@ -43,7 +46,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-green-600 rounded-2xl mb-4 overflow-hidden">
-              <img src="/logo.webp" alt="Dirba Amba Service Logo" className="w-full h-full object-contain p-2" />
+              <img src="/Logo.svg" alt="Dirba Amba Service Logo" className="w-full h-full object-contain p-2" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Dirba Amba Service</h1>
             <p className="text-gray-600">Seasonal Transport Management</p>
