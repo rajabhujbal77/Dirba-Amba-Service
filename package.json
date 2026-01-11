@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "preview": "vite build && vite preview"
   },
   "dependencies": {
     "@popperjs/core": "2.11.8",
