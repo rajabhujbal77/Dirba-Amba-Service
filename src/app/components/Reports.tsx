@@ -109,6 +109,12 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
     grandTotalRevenue: number;
     allSizes: string[];
   }>({ depots: [], grandTotalPackages: 0, grandTotalRevenue: 0, allSizes: [] });
+  const [forwardingDepotData, setForwardingDepotData] = useState<{
+    depots: OriginDepotReport[];
+    grandTotalPackages: number;
+    grandTotalRevenue: number;
+    allSizes: string[];
+  }>({ depots: [], grandTotalPackages: 0, grandTotalRevenue: 0, allSizes: [] });
 
   useEffect(() => {
     loadReportsData();
@@ -120,13 +126,14 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
       const fromDate = dateRange.from || undefined;
       const toDate = dateRange.to || undefined;
 
-      const [bookingRes, tripRes, customersRes, routesRes, creditRes, originDepotRes] = await Promise.all([
+      const [bookingRes, tripRes, customersRes, routesRes, creditRes, originDepotRes, forwardingDepotRes] = await Promise.all([
         reportsApi.getBookingSummary(fromDate, toDate, assignedDepotId),
         reportsApi.getTripSummary(fromDate, toDate, assignedDepotId),
         reportsApi.getTopCustomers(5, fromDate, toDate, assignedDepotId),
         reportsApi.getTopRoutes(5, fromDate, toDate, assignedDepotId),
         creditApi.getCreditSummary(assignedDepotId),
-        reportsApi.getOriginDepotReport(fromDate, toDate)
+        reportsApi.getOriginDepotReport(fromDate, toDate),
+        reportsApi.getForwardingDepotReport(fromDate, toDate)
       ]);
 
       setBookingSummary(bookingRes);
@@ -135,6 +142,7 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
       setTopRoutes(routesRes.routes);
       setCreditSummary(creditRes);
       setOriginDepotData(originDepotRes);
+      setForwardingDepotData(forwardingDepotRes);
     } catch (error) {
       console.error('Error loading reports:', error);
     } finally {
@@ -410,6 +418,33 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
         filename = 'Origin_Depot_Collection_Report';
         break;
 
+      case 'forwarding_depot':
+        csv = 'FORWARDING DEPOT REPORT\n';
+        csv += `${dateText}\n\n`;
+        csv += 'SUMMARY\n';
+        csv += `Total Depots,${forwardingDepotData.depots.length}\n`;
+        csv += `Total Packages,${forwardingDepotData.grandTotalPackages}\n`;
+        csv += `Total Revenue,${forwardingDepotData.grandTotalRevenue}\n\n`;
+
+        // Build header with dynamic size columns
+        csv += 'FORWARDING DEPOT DETAILS\n';
+        const fwdSizeHeaders = forwardingDepotData.allSizes.join(',');
+        csv += `Depot Name,Total Packages,${fwdSizeHeaders},Revenue\n`;
+
+        forwardingDepotData.depots.forEach((depot) => {
+          const sizeValues = forwardingDepotData.allSizes.map(size => depot.sizeBreakdown[size] || 0).join(',');
+          csv += `"${depot.depotName}",${depot.totalPackages},${sizeValues},${depot.totalRevenue}\n`;
+        });
+
+        // Grand total row
+        const fwdGrandTotalSizes = forwardingDepotData.allSizes.map(size =>
+          forwardingDepotData.depots.reduce((sum, d) => sum + (d.sizeBreakdown[size] || 0), 0)
+        ).join(',');
+        csv += `"GRAND TOTAL",${forwardingDepotData.grandTotalPackages},${fwdGrandTotalSizes},${forwardingDepotData.grandTotalRevenue}\n`;
+
+        filename = 'Forwarding_Depot_Report';
+        break;
+
       default:
         csv = 'Dirba Amba Service - Reports\n\n';
         csv += `${dateText}\n`;
@@ -459,6 +494,7 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
               <option value="revenue">Revenue Report</option>
               <option value="customers">Customer Report</option>
               <option value="origin_depot">Origin Depot Collection</option>
+              <option value="forwarding_depot">Forwarding Depot Report</option>
               <option value="credit">Credit Customers Report</option>
             </select>
           </div>
@@ -923,6 +959,112 @@ export default function Reports({ assignedDepotId }: ReportsProps) {
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
                 No depot collection data found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Forwarding Depot Report */}
+      {reportType === 'forwarding_depot' && (
+        <div className="mt-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
+            <div className="bg-white rounded-xl p-4 md:p-6 border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Total Depots</p>
+              <p className="text-2xl font-bold text-gray-900">{forwardingDepotData.depots.length}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 md:p-6 border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Total Packages Received</p>
+              <p className="text-2xl font-bold text-blue-600">{forwardingDepotData.grandTotalPackages.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 md:p-6 border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
+              <p className="text-2xl font-bold text-green-600">{formatCurrency(forwardingDepotData.grandTotalRevenue)}</p>
+            </div>
+          </div>
+
+          {/* Forwarding Depot Table - Desktop */}
+          <div className="bg-white rounded-xl border border-gray-200 hidden md:block">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="font-bold text-gray-900">Packages Received by Forwarding Depot</h2>
+              <p className="text-sm text-gray-500 mt-1">Breakdown by package size</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Depot Name</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Packages</th>
+                    {forwardingDepotData.allSizes.map(size => (
+                      <th key={size} className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{size}</th>
+                    ))}
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {forwardingDepotData.depots.length > 0 ? (
+                    <>
+                      {forwardingDepotData.depots.map((depot) => (
+                        <tr key={depot.depotId} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{depot.depotName}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-gray-700 font-bold">{depot.totalPackages}</td>
+                          {forwardingDepotData.allSizes.map(size => (
+                            <td key={size} className="px-4 py-4 whitespace-nowrap text-right text-gray-600">{depot.sizeBreakdown[size] || 0}</td>
+                          ))}
+                          <td className="px-6 py-4 whitespace-nowrap text-right font-bold text-green-600">{formatCurrency(depot.totalRevenue)}</td>
+                        </tr>
+                      ))}
+                      {/* Grand Total Row */}
+                      <tr className="bg-orange-50 font-bold">
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">GRAND TOTAL</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900">{forwardingDepotData.grandTotalPackages}</td>
+                        {forwardingDepotData.allSizes.map(size => (
+                          <td key={size} className="px-4 py-4 whitespace-nowrap text-right text-gray-700">
+                            {forwardingDepotData.depots.reduce((sum, d) => sum + (d.sizeBreakdown[size] || 0), 0)}
+                          </td>
+                        ))}
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-orange-600">{formatCurrency(forwardingDepotData.grandTotalRevenue)}</td>
+                      </tr>
+                    </>
+                  ) : (
+                    <tr>
+                      <td colSpan={3 + forwardingDepotData.allSizes.length} className="px-6 py-8 text-center text-gray-500">
+                        No forwarding depot data found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Forwarding Depot Cards - Mobile */}
+          <div className="md:hidden space-y-4">
+            {forwardingDepotData.depots.length > 0 ? (
+              forwardingDepotData.depots.map((depot) => (
+                <div key={depot.depotId} className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <p className="font-bold text-gray-900">{depot.depotName}</p>
+                    <span className="text-green-600 font-bold">{formatCurrency(depot.totalRevenue)}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Total Packages</span>
+                      <span className="text-sm font-bold text-gray-900">{depot.totalPackages}</span>
+                    </div>
+                    {forwardingDepotData.allSizes.map(size => (
+                      <div key={size} className="flex justify-between">
+                        <span className="text-sm text-gray-600">{size}</span>
+                        <span className="text-sm text-gray-700">{depot.sizeBreakdown[size] || 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">
+                No forwarding depot data found
               </div>
             )}
           </div>

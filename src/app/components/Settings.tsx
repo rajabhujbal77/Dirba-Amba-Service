@@ -846,6 +846,22 @@ function PackagesPricing() {
     return pkg?.basePrice || 0;
   };
 
+  const handleMovePackage = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= packages.length) return;
+
+    const pkg1 = packages[index];
+    const pkg2 = packages[targetIndex];
+
+    try {
+      await packagesApi.swapOrder(pkg1.id, pkg1.sortOrder, pkg2.id, pkg2.sortOrder);
+      loadData();
+    } catch (error) {
+      console.error('Error reordering packages:', error);
+      alert('Failed to reorder packages');
+    }
+  };
+
   if (isLoading) {
     return <div className="p-6">Loading...</div>;
   }
@@ -935,6 +951,16 @@ function PackagesPricing() {
                   left: 0,
                   zIndex: 30,
                   backgroundColor: '#f3f4f6',
+                  minWidth: '70px',
+                  borderRight: '2px solid #e5e7eb'
+                }}>
+                  Order
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase" style={{
+                  position: 'sticky',
+                  left: '70px',
+                  zIndex: 30,
+                  backgroundColor: '#f3f4f6',
                   minWidth: '180px',
                   borderRight: '2px solid #e5e7eb'
                 }}>
@@ -942,7 +968,7 @@ function PackagesPricing() {
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase" style={{
                   position: 'sticky',
-                  left: '180px',
+                  left: '250px',
                   zIndex: 30,
                   backgroundColor: '#f3f4f6',
                   minWidth: '130px',
@@ -964,11 +990,38 @@ function PackagesPricing() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {packages.map((pkg) => (
+              {packages.map((pkg, pkgIndex) => (
                 <tr key={pkg.id} className="hover:bg-amber-50 transition-colors border-b border-gray-200">
-                  <td className="px-6 py-4 font-medium text-gray-900" style={{
+                  <td className="px-4 py-4" style={{
                     position: 'sticky',
                     left: 0,
+                    zIndex: 20,
+                    backgroundColor: 'white',
+                    minWidth: '70px',
+                    borderRight: '2px solid #e5e7eb'
+                  }}>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => handleMovePackage(pkgIndex, 'up')}
+                        disabled={pkgIndex === 0}
+                        className={`w-6 h-6 flex items-center justify-center rounded text-sm font-bold transition-colors ${pkgIndex === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-orange-100 hover:text-orange-600'}`}
+                        title="Move up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => handleMovePackage(pkgIndex, 'down')}
+                        disabled={pkgIndex === packages.length - 1}
+                        className={`w-6 h-6 flex items-center justify-center rounded text-sm font-bold transition-colors ${pkgIndex === packages.length - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-orange-100 hover:text-orange-600'}`}
+                        title="Move down"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 font-medium text-gray-900" style={{
+                    position: 'sticky',
+                    left: '70px',
                     zIndex: 20,
                     backgroundColor: 'white',
                     minWidth: '180px',
@@ -978,7 +1031,7 @@ function PackagesPricing() {
                   </td>
                   <td className="px-6 py-4 font-bold text-orange-600" style={{
                     position: 'sticky',
-                    left: '180px',
+                    left: '250px',
                     zIndex: 20,
                     backgroundColor: 'white',
                     minWidth: '130px',

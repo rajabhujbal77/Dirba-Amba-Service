@@ -734,18 +734,8 @@ function Step3ReceiversPackages({ formData, setFormData, packages, pricing, onNe
     return priceEntry?.price || packages.find((p: any) => p.id === packageId)?.basePrice || 0;
   };
 
-  // Sort packages: 1Dz first
-  const sortedPackages = [...packages].sort((a: any, b: any) => {
-    const priority = ['1 dz', '1dz', '2 dz', '2dz', '3 dz', '3dz', '5 dz', '5dz'];
-    const aName = a.name?.toLowerCase() || '';
-    const bName = b.name?.toLowerCase() || '';
-    const aIndex = priority.findIndex(p => aName.includes(p));
-    const bIndex = priority.findIndex(p => bName.includes(p));
-    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-    if (aIndex !== -1) return -1;
-    if (bIndex !== -1) return 1;
-    return aName.localeCompare(bName);
-  });
+  // Packages are already sorted by sort_order from the API
+  // No need to sort here - admin controls order from Settings
 
   const updateReceiver = (index: number, field: string, value: any) => {
     const newReceivers = [...formData.receivers];
@@ -882,7 +872,7 @@ function Step3ReceiversPackages({ formData, setFormData, packages, pricing, onNe
           <div>
             <h4 className="font-semibold text-gray-900 mb-3">📦 Select Packages</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {sortedPackages.map((pkg: any) => {
+              {packages.map((pkg: any) => {
                 const price = getPackagePrice(pkg.id);
                 const quantity = getReceiverPackageQuantity(receiverIndex, pkg.id);
                 const isOther = isOtherPackage(pkg.name);
