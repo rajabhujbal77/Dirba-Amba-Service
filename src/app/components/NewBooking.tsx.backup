@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useId } from 'react';
 // jsPDF is dynamically imported when needed to reduce initial bundle size
-import { depotsApi, packagesApi, depotPricingApi, bookingsApi, seasonApi, contactsApi, receiptsApi, creditApi } from '../utils/api';
+import { depotsApi, packagesApi, depotPricingApi, bookingsApi, seasonApi, contactsApi, receiptsApi } from '../utils/api';
 import ContactAutocomplete from './ContactAutocomplete';
 import { useBookingStore, useSyncStore, useOnlineStore } from '../stores';
 import { queueOperation, processQueue } from '../utils/syncEngine';
@@ -47,7 +47,6 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [receiptNumber, setReceiptNumber] = useState('');
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
-  const [customerPricing, setCustomerPricing] = useState<any[]>([]); // Customer-specific pricing
 
   // Zustand stores for offline support
   const { draft, hasDraft, saveDraft, clearDraft, lastSavedAt, pendingBookingId, setPendingBookingId } = useBookingStore();
@@ -188,38 +187,6 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
             if (receiver.name && receiver.phone) {
               await contactsApi.upsert(receiver.name, receiver.phone).catch(console.error);
             }
-          }
-
-          // Save custom pricing for this customer (if any custom prices were used)
-          try {
-            const customPricesToSave: { packageId: string; depotId: string; discountedPrice: number }[] = [];
-
-            for (const receiver of formData.receivers) {
-              for (const pkg of receiver.packages) {
-                // Get standard price for comparison
-                const standardPriceEntry = pricing.find(
-                  (p: any) => p.packageId === pkg.packageId && p.depotId === formData.destinationDepotId
-                );
-                const standardPrice = standardPriceEntry?.price || packages.find((p: any) => p.id === pkg.packageId)?.basePrice || 0;
-
-                // Only save if price differs from standard
-                if (pkg.price !== standardPrice) {
-                  customPricesToSave.push({
-                    packageId: pkg.packageId,
-                    depotId: formData.destinationDepotId,
-                    discountedPrice: pkg.price
-                  });
-                }
-              }
-            }
-
-            if (customPricesToSave.length > 0 && formData.senderPhone) {
-              await creditApi.setCustomerPricing(formData.senderPhone, customPricesToSave);
-              console.log('[NewBooking] Saved custom pricing for customer:', formData.senderPhone, customPricesToSave);
-            }
-          } catch (pricingError) {
-            console.error('[NewBooking] Failed to save custom pricing:', pricingError);
-            // Don't fail the booking if pricing save fails
           }
 
           // Clear draft on successful submission
@@ -516,8 +483,6 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
             setFormData={setFormData}
             packages={packages}
             pricing={pricing}
-            customerPricing={customerPricing}
-            setCustomerPricing={setCustomerPricing}
             onNext={nextStep}
             onPrev={prevStep}
           />
@@ -758,48 +723,11 @@ function Step2SenderDetails({ formData, setFormData, onNext, onPrev }: any) {
 // ============================================================================
 // STEP 3: Receivers & Packages
 // ============================================================================
-function Step3ReceiversPackages({ formData, setFormData, packages, pricing, customerPricing, setCustomerPricing, onNext, onPrev }: any) {
+function Step3ReceiversPackages({ formData, setFormData, packages, pricing, onNext, onPrev }: any) {
   const validatePhone = (phone: string) => /^[6-9]\d{9}$/.test(phone);
   const requiresAddress = ['home_sender', 'home_topay', 'home_drt'].includes(formData.deliveryType);
-  const [pricesLoaded, setPricesLoaded] = useState(false);
 
-  // Fetch customer pricing on mount (based on sender phone)
-  useEffect(() => {
-    const fetchCustomerPricing = async () => {
-      if (formData.senderPhone && validatePhone(formData.senderPhone)) {
-        try {
-          const { pricing: custPricing } = await creditApi.getCustomerPricing(formData.senderPhone);
-          setCustomerPricing(custPricing || []);
-        } catch (error) {
-          console.log('No customer pricing found, using defaults');
-          setCustomerPricing([]);
-        }
-      }
-      setPricesLoaded(true);
-    };
-    fetchCustomerPricing();
-  }, [formData.senderPhone]);
-
-  // Get default price (from customer pricing, then depot pricing, then base)
-  const getDefaultPrice = (packageId: string) => {
-    // First check customer-specific pricing
-    const customerPrice = customerPricing.find(
-      (p: any) => p.packageId === packageId && p.depotId === formData.destinationDepotId
-    );
-    if (customerPrice) return customerPrice.discountedPrice;
-
-    // Then check depot pricing
-    const priceEntry = pricing.find(
-      (p: any) => p.packageId === packageId && p.depotId === formData.destinationDepotId
-    );
-    if (priceEntry) return priceEntry.price;
-
-    // Finally use base price
-    return packages.find((p: any) => p.id === packageId)?.basePrice || 0;
-  };
-
-  // Get the standard depot price (for comparison)
-  const getStandardPrice = (packageId: string) => {
+  const getPackagePrice = (packageId: string) => {
     const priceEntry = pricing.find(
       (p: any) => p.packageId === packageId && p.depotId === formData.destinationDepotId
     );
@@ -815,21 +743,18 @@ function Step3ReceiversPackages({ formData, setFormData, packages, pricing, cust
     setFormData({ ...formData, receivers: newReceivers });
   };
 
-  const updateReceiverPackage = (receiverIndex: number, packageId: string, quantity: number, customPrice?: number) => {
+  const updateReceiverPackage = (receiverIndex: number, packageId: string, quantity: number) => {
     const newReceivers = [...formData.receivers];
     const receiver = newReceivers[receiverIndex];
     const pkg = packages.find((p: any) => p.id === packageId);
-
-    // Use custom price if provided, otherwise get from existing package or default
-    const existingPkg = receiver.packages.find((p: any) => p.packageId === packageId);
-    const price = customPrice !== undefined ? customPrice : (existingPkg?.price || getDefaultPrice(packageId));
+    const price = getPackagePrice(packageId);
 
     const existingIndex = receiver.packages.findIndex((p: any) => p.packageId === packageId);
 
     if (quantity > 0) {
       const pkgData = { packageId, size: pkg?.name || 'Custom', quantity, price };
       if (existingIndex >= 0) {
-        receiver.packages[existingIndex] = { ...receiver.packages[existingIndex], ...pkgData };
+        receiver.packages[existingIndex] = pkgData;
       } else {
         receiver.packages.push(pkgData);
       }
@@ -838,24 +763,6 @@ function Step3ReceiversPackages({ formData, setFormData, packages, pricing, cust
     }
 
     setFormData({ ...formData, receivers: newReceivers });
-  };
-
-  // Update price for a package
-  const updateReceiverPackagePrice = (receiverIndex: number, packageId: string, newPrice: number) => {
-    const newReceivers = [...formData.receivers];
-    const receiver = newReceivers[receiverIndex];
-    const existingIndex = receiver.packages.findIndex((p: any) => p.packageId === packageId);
-
-    if (existingIndex >= 0) {
-      receiver.packages[existingIndex].price = newPrice;
-      setFormData({ ...formData, receivers: newReceivers });
-    }
-  };
-
-  // Get current price for a package (from receiver's selected packages or default)
-  const getReceiverPackagePrice = (receiverIndex: number, packageId: string) => {
-    const pkg = formData.receivers[receiverIndex]?.packages?.find((p: any) => p.packageId === packageId);
-    return pkg?.price ?? getDefaultPrice(packageId);
   };
 
   // Update description for Other package
@@ -964,47 +871,16 @@ function Step3ReceiversPackages({ formData, setFormData, packages, pricing, cust
           {/* Packages - 3x3 Grid */}
           <div>
             <h4 className="font-semibold text-gray-900 mb-3">📦 Select Packages</h4>
-            {customerPricing.length > 0 && (
-              <p className="text-xs text-orange-600 mb-2">💰 Special pricing applied for this customer</p>
-            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {packages.map((pkg: any) => {
-                const currentPrice = getReceiverPackagePrice(receiverIndex, pkg.id);
-                const standardPrice = getStandardPrice(pkg.id);
+                const price = getPackagePrice(pkg.id);
                 const quantity = getReceiverPackageQuantity(receiverIndex, pkg.id);
                 const isOther = isOtherPackage(pkg.name);
                 const description = getReceiverPackageDescription(receiverIndex, pkg.id);
-                const isCustomPrice = quantity > 0 && currentPrice !== standardPrice;
                 return (
-                  <div key={pkg.id} className={`p-3 bg-white border rounded-lg hover:border-orange-300 transition-colors ${isOther && quantity > 0 ? 'border-yellow-400 col-span-full' : isCustomPrice ? 'border-orange-400' : 'border-gray-200'}`}>
+                  <div key={pkg.id} className={`p-3 bg-white border rounded-lg hover:border-orange-300 transition-colors ${isOther && quantity > 0 ? 'border-yellow-400 col-span-full' : 'border-gray-200'}`}>
                     <div className="font-medium text-gray-900 text-sm">{pkg.name}</div>
-                    {/* Editable Price Input */}
-                    <div className="flex items-center gap-1 mb-2">
-                      <span className="text-xs text-gray-500">₹</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        name={`package-price-${receiverIndex}-${pkg.id}`}
-                        value={currentPrice}
-                        onChange={(e) => {
-                          const newPrice = Number(e.target.value) || 0;
-                          if (quantity > 0) {
-                            updateReceiverPackagePrice(receiverIndex, pkg.id, newPrice);
-                          } else {
-                            // If quantity is 0, set quantity to 1 with the new price
-                            updateReceiverPackage(receiverIndex, pkg.id, 1, newPrice);
-                          }
-                        }}
-                        className={`w-14 px-1 py-0.5 text-center text-xs border rounded focus:ring-1 focus:ring-orange-500 ${isCustomPrice ? 'border-orange-400 bg-orange-50 font-medium' : 'border-gray-200'}`}
-                      />
-                      <span className="text-xs text-gray-500">/unit</span>
-                      {isCustomPrice && (
-                        <span className="text-xs text-green-600 font-medium" title={`Standard: ₹${standardPrice}`}>
-                          {currentPrice < standardPrice ? '-' : '+'}₹{Math.abs(standardPrice - currentPrice)}
-                        </span>
-                      )}
-                    </div>
+                    <div className="text-xs text-gray-600 mb-2">₹{price}/unit</div>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
@@ -1018,7 +894,7 @@ function Step3ReceiversPackages({ formData, setFormData, packages, pricing, cust
                       />
                       {quantity > 0 && (
                         <span className="text-xs font-medium text-green-600">
-                          ₹{(quantity * currentPrice).toFixed(0)}
+                          ₹{(quantity * price).toFixed(0)}
                         </span>
                       )}
                     </div>
