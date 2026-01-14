@@ -1205,12 +1205,27 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
       ``,
       `📍 DESTINATION`,
       `${destinationDepot?.name || 'N/A'}`,
-      ``,
-      `👤 SENDER`,
-      `*${formData?.senderName || 'N/A'}* (${formData?.senderPhone || 'N/A'})`,
-      ``,
-      `📦 RECEIVERS & PACKAGES`,
     ];
+
+    // Add depot address if available
+    if (destinationDepot?.location) {
+      lines.push(`📌 ${destinationDepot.location}`);
+    }
+
+    // Add depot contact if available
+    if (destinationDepot?.contact_person || destinationDepot?.contact_phone) {
+      const contactInfo = [
+        destinationDepot?.contact_person,
+        destinationDepot?.contact_phone
+      ].filter(Boolean).join(' - ');
+      lines.push(`👤 Contact: ${contactInfo}`);
+    }
+
+    lines.push(``);
+    lines.push(`👤 SENDER`);
+    lines.push(`*${formData?.senderName || 'N/A'}* (${formData?.senderPhone || 'N/A'})`);
+    lines.push(``);
+    lines.push(`📦 RECEIVERS & PACKAGES`);
 
     formData?.receivers?.forEach((receiver: any, i: number) => {
       lines.push(`\n${i + 1}. ${receiver.name} (${receiver.phone})`);
@@ -1274,7 +1289,36 @@ function Step5Confirmation({ receiptNumber, formData, depots, onNewBooking, onNa
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text(`Destination: ${destinationDepot?.name || 'N/A'}`, margin, y);
-    y += 6;
+    y += 5;
+
+    // Show depot address if available
+    if (destinationDepot?.location) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      // Split long addresses into multiple lines if needed
+      const addressLines = doc.splitTextToSize(destinationDepot.location, pageWidth - (2 * margin));
+      addressLines.forEach((line: string) => {
+        doc.text(line, margin, y);
+        y += 4;
+      });
+      doc.setTextColor(0, 0, 0);
+    }
+
+    // Show depot contact person and phone if available
+    if (destinationDepot?.contact_person || destinationDepot?.contact_phone) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      const contactInfo = [
+        destinationDepot?.contact_person,
+        destinationDepot?.contact_phone
+      ].filter(Boolean).join(' - ');
+      doc.text(`Contact: ${contactInfo}`, margin, y);
+      y += 4;
+      doc.setTextColor(0, 0, 0);
+    }
+    y += 3;
 
     // ============ SENDER ============
     doc.setFontSize(10);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // jsPDF is dynamically imported when needed to reduce bundle size
-import { bookingsApi } from '../utils/api';
+import { bookingsApi, depotsApi } from '../utils/api';
 
 interface AllReceiptsProps {
   assignedDepotId?: string | null;
@@ -74,10 +74,201 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
     setShowModal(true);
   };
 
-  const handlePrint = (receipt: any) => {
-    setSelectedReceipt(receipt);
-    setShowModal(true);
-    setTimeout(() => window.print(), 100);
+  const handlePrint = async (receipt: any) => {
+    // Generate PDF and open for printing (same format as download)
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ format: 'a5', unit: 'mm', orientation: 'landscape' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 12;
+    let y = 12;
+
+    // Fetch depot details
+    let depotDetails: any = null;
+    if (receipt.destination_depot_id) {
+      try {
+        depotDetails = await depotsApi.getById(receipt.destination_depot_id);
+      } catch (error) {
+        console.log('Could not fetch depot details:', error);
+      }
+    }
+
+    // Header
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('DIRBA AMBA SERVICE', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80, 80, 80);
+    doc.text('AT POST JAMSANDE, TAL.DEVGAD, DIST. SINDHUDURG | MOB: 9422584166, 9422435348', pageWidth / 2, y, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 6;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Receipt No: ${receipt.id}`, margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Date: ${new Date(receipt.date).toLocaleDateString('en-IN')}`, pageWidth - margin, y, { align: 'right' });
+    y += 7;
+
+    // Destination
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Destination: ${receipt.destination || 'N/A'}`, margin, y);
+    y += 5;
+
+    if (depotDetails?.location) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      const addressLines = doc.splitTextToSize(depotDetails.location, pageWidth - (2 * margin));
+      addressLines.forEach((line: string) => {
+        doc.text(line, margin, y);
+        y += 4;
+      });
+      doc.setTextColor(0, 0, 0);
+    }
+
+    if (depotDetails?.contact_person || depotDetails?.contact_phone) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      const contactInfo = [depotDetails?.contact_person, depotDetails?.contact_phone].filter(Boolean).join(' - ');
+      doc.text(`Contact: ${contactInfo}`, margin, y);
+      y += 4;
+      doc.setTextColor(0, 0, 0);
+    }
+    y += 3;
+
+    // Sender
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Sender: ${receipt.customer || 'N/A'} (${receipt.customerPhone || 'N/A'})`, margin, y);
+    y += 8;
+
+    // Table
+    const tableMargin = margin;
+    const tableWidth = pageWidth - (2 * tableMargin);
+    const colWidths = { srNo: 12, receiver: 55, packageSize: 40, qty: 20, amount: tableWidth - 12 - 55 - 40 - 20 };
+    const rowHeight = 7;
+    const maxY = pageHeight - 35;
+
+    doc.setFillColor(51, 51, 51);
+    doc.rect(tableMargin, y, tableWidth, rowHeight, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+
+    let xPos = tableMargin + 3;
+    doc.text('Sr.', xPos, y + 5);
+    xPos += colWidths.srNo;
+    doc.text('Receiver', xPos, y + 5);
+    xPos += colWidths.receiver;
+    doc.text('Package Size', xPos, y + 5);
+    xPos += colWidths.packageSize;
+    doc.text('Qty', xPos, y + 5);
+    xPos += colWidths.qty;
+    doc.text('Amount', xPos, y + 5);
+    y += rowHeight;
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    let rowIndex = 0;
+    let grandTotal = 0;
+
+    if (receipt.receivers && receipt.receivers.length > 0) {
+      receipt.receivers.forEach((r: any) => {
+        if (r.packages && r.packages.length > 0) {
+          r.packages.forEach((pkg: any, pkgIndex: number) => {
+            if (y > maxY) { doc.addPage(); y = 15; }
+            rowIndex++;
+            const amount = pkg.quantity * pkg.price_per_unit;
+            grandTotal += amount;
+
+            if (rowIndex % 2 === 0) {
+              doc.setFillColor(248, 248, 248);
+              doc.rect(tableMargin, y, tableWidth, rowHeight, 'F');
+            }
+
+            doc.setDrawColor(220, 220, 220);
+            const currentRowHeight = pkgIndex === 0 ? rowHeight + 3 : rowHeight;
+            doc.rect(tableMargin, y, tableWidth, currentRowHeight, 'S');
+
+            doc.setFontSize(9);
+            xPos = tableMargin + 3;
+            doc.text(`${rowIndex}`, xPos, y + 5);
+            xPos += colWidths.srNo;
+
+            if (pkgIndex === 0) {
+              doc.setFont('helvetica', 'bold');
+              doc.text(`${r.name || 'N/A'}`.substring(0, 22), xPos, y + 4);
+              doc.setFontSize(8);
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(100, 100, 100);
+              doc.text(`${r.phone || ''}`, xPos, y + 8);
+              doc.setTextColor(0, 0, 0);
+              doc.setFontSize(9);
+            }
+            xPos += colWidths.receiver;
+            doc.text(pkg.size || 'N/A', xPos, y + 5);
+            xPos += colWidths.packageSize;
+            doc.text(`${pkg.quantity}`, xPos, y + 5);
+            xPos += colWidths.qty;
+            doc.text(`₹${amount.toFixed(0)}`, xPos, y + 5);
+            y += currentRowHeight;
+          });
+        }
+      });
+    }
+
+    if (grandTotal === 0) grandTotal = receipt.amount || 0;
+
+    // Total row
+    doc.setFillColor(51, 51, 51);
+    doc.rect(tableMargin, y, tableWidth, rowHeight + 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Payment: ${receipt.paymentMode || 'CASH'}`, tableMargin + 3, y + 6);
+    const totalXPos = tableMargin + colWidths.srNo + colWidths.receiver + colWidths.packageSize + colWidths.qty + 3;
+    doc.text(`TOTAL: ₹${grandTotal.toLocaleString('en-IN')}`, totalXPos, y + 6);
+    y += rowHeight + 8;
+    doc.setTextColor(0, 0, 0);
+
+    // Footer
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Thank you for choosing Dirba Amba Service!', pageWidth / 2, y, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 12;
+
+    const signLineWidth = 45;
+    const signLineX = pageWidth - margin - signLineWidth;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.4);
+    doc.line(signLineX, y, signLineX + signLineWidth, y);
+    y += 4;
+    doc.setFontSize(8);
+    doc.text('Authorized Signature', signLineX + signLineWidth / 2, y, { align: 'center' });
+
+    // Open PDF in new window for printing
+    const pdfBlob = doc.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    const printWindow = window.open(pdfUrl, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
   };
 
   const handleEdit = (receipt: any) => {
@@ -159,6 +350,16 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
     const margin = 12;
     let y = 12;
 
+    // Fetch depot details to get address and contact info
+    let depotDetails: any = null;
+    if (receipt.destination_depot_id) {
+      try {
+        depotDetails = await depotsApi.getById(receipt.destination_depot_id);
+      } catch (error) {
+        console.log('Could not fetch depot details:', error);
+      }
+    }
+
     // ============ HEADER ============
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
@@ -192,7 +393,36 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text(`Destination: ${receipt.destination || 'N/A'}`, margin, y);
-    y += 6;
+    y += 5;
+
+    // Show depot address if available
+    if (depotDetails?.location) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      // Split long addresses into multiple lines if needed
+      const addressLines = doc.splitTextToSize(depotDetails.location, pageWidth - (2 * margin));
+      addressLines.forEach((line: string) => {
+        doc.text(line, margin, y);
+        y += 4;
+      });
+      doc.setTextColor(0, 0, 0);
+    }
+
+    // Show depot contact person and phone if available
+    if (depotDetails?.contact_person || depotDetails?.contact_phone) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      const contactInfo = [
+        depotDetails?.contact_person,
+        depotDetails?.contact_phone
+      ].filter(Boolean).join(' - ');
+      doc.text(`Contact: ${contactInfo}`, margin, y);
+      y += 4;
+      doc.setTextColor(0, 0, 0);
+    }
+    y += 3;
 
     // ============ SENDER ============
     doc.setFontSize(10);
@@ -574,9 +804,9 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
 
       {/* View Modal */}
       {showModal && selectedReceipt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:bg-white print:relative">
-          <div className="bg-white rounded-xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto print:rounded-none print:max-w-full print:mx-0">
-            <div className="flex justify-between items-center mb-6 print:hidden">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="print-content bg-white rounded-xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Receipt Details</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
             </div>
@@ -631,9 +861,9 @@ export default function AllReceipts({ assignedDepotId }: AllReceiptsProps) {
               </div>
             </div>
 
-            <div className="mt-6 flex gap-3 print:hidden">
+            <div className="mt-6 flex gap-3">
               <button
-                onClick={() => window.print()}
+                onClick={() => handlePrint(selectedReceipt)}
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
               >
                 Print

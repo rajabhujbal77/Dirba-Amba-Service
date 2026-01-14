@@ -393,9 +393,9 @@ function DepotManagement() {
     setFormData({
       name: depot.name,
       type: depot.type,
-      address: depot.address || '',
-      contactPerson: depot.contactPerson || '',
-      contactPhone: depot.contactPhone || '',
+      address: depot.location || '',
+      contactPerson: depot.contact_person || '',
+      contactPhone: depot.contact_phone || '',
     });
     setShowForm(true);
   };
@@ -533,9 +533,9 @@ function DepotManagement() {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm">
-                  {depot.contactPerson && <div>{depot.contactPerson}</div>}
-                  {depot.contactPhone && <div className="text-gray-500">{depot.contactPhone}</div>}
-                  {!depot.contactPerson && !depot.contactPhone && '-'}
+                  {depot.contact_person && <div>{depot.contact_person}</div>}
+                  {depot.contact_phone && <div className="text-gray-500">{depot.contact_phone}</div>}
+                  {!depot.contact_person && !depot.contact_phone && '-'}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex gap-2">
@@ -608,6 +608,12 @@ function DepotRoutes() {
       } else {
         await depotRoutesApi.create(formData);
       }
+
+      // Auto-enable forwarding for the origin depot when routes are configured
+      if (formData.originDepotId && formData.forwardingDepotIds.length > 0) {
+        await depotsApi.update(formData.originDepotId, { forwarding_enabled: true });
+      }
+
       setShowForm(false);
       setEditingRoute(null);
       setFormData({ originDepotId: '', forwardingDepotIds: [] });
