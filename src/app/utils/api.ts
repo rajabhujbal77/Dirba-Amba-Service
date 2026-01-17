@@ -563,6 +563,7 @@ export const tripsApi = {
 
   // Get all bookings for a specific trip
   async getBookingsForTrip(tripId: string) {
+    // First, try direct trip_id query
     const { data, error } = await supabase
       .from('bookings_complete')
       .select('*')
@@ -570,7 +571,42 @@ export const tripsApi = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return { bookings: data || [] };
+
+    // If we found bookings, return them
+    if (data && data.length > 0) {
+      return { bookings: data };
+    }
+
+    // Fallback: Check trip_bookings junction table (for forwarding trips where trip_id update may fail)
+    console.log(`[getBookingsForTrip] No bookings found via trip_id, checking junction table for trip: ${tripId}`);
+    const { data: junctionData, error: junctionError } = await supabase
+      .from('trip_bookings')
+      .select('booking_id')
+      .eq('trip_id', tripId);
+
+    if (junctionError) {
+      console.error('Error fetching from trip_bookings:', junctionError);
+      return { bookings: [] };
+    }
+
+    if (!junctionData || junctionData.length === 0) {
+      return { bookings: [] };
+    }
+
+    // Get full booking data using the booking IDs from junction table
+    const bookingIds = junctionData.map((j: any) => j.booking_id);
+    const { data: bookingsData, error: bookingsError } = await supabase
+      .from('bookings_complete')
+      .select('*')
+      .in('id', bookingIds)
+      .order('created_at', { ascending: false });
+
+    if (bookingsError) {
+      console.error('Error fetching bookings by IDs:', bookingsError);
+      return { bookings: [] };
+    }
+
+    return { bookings: bookingsData || [] };
   },
 
   /**

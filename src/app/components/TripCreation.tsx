@@ -18,6 +18,7 @@ interface Booking {
   receivers: any[];
   status: string;
   created_at: string;
+  trip_id?: string;
 }
 
 interface Depot {
@@ -117,10 +118,13 @@ export default function TripCreation({ userRole, assignedDepotId }: TripCreation
 
         // For forwarding trips: show bookings that are in_transit or reached_depot
         // AND destined for one of the forwarding destinations
+        // AND not already added to a forwarding trip (status != 'in_transit_forwarding')
+        // Note: These bookings already have trip_id from origin trip, so we check status instead
         // These are packages that arrived at this depot and need to be forwarded
         const forwardingBookings = (bookingsRes.bookings || []).filter((b: Booking) =>
           ['in_transit', 'reached_depot'].includes(b.status) &&
           destinationIds.includes(b.destination_depot_id)
+          // Note: status check already excludes 'in_transit_forwarding' since we only include 'in_transit' and 'reached_depot'
         );
 
         setAvailableBookings(forwardingBookings);

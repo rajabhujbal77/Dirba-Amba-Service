@@ -96,12 +96,15 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
         )
         : allTrips;
 
-      // Depot managers Deliveries tab: Only show bookings where THIS depot is the final destination
-      // NOT bookings passing through for forwarding (those should only appear in Create Forwarding Trip)
+      // Depot managers Deliveries tab: Show bookings where:
+      // 1. This depot is the final destination OR origin
+      // 2. OR bookings destined for forwarding destinations (for trips they created)
+      // This ensures driver's memo can access all bookings for forwarding trips
       const filteredBookings = userRole === 'depot_manager' && assignedDepotId
         ? allBookings.filter((b: any) =>
           (b.destination_depot_id === assignedDepotId ||
-            b.origin_depot_id === assignedDepotId) &&
+            b.origin_depot_id === assignedDepotId ||
+            forwardingDestinationIds.includes(b.destination_depot_id)) &&
           b.status !== 'booked'
         )
         : allBookings;
@@ -262,20 +265,28 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
     doc.text(`Vehicle: ${trip.vehicle_number}`, 14, y); y += 5;
     doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, y); y += 10;
 
-    // Get bookings for THIS trip, sorted by destination depot order number
-    // Create depot order map: depot name -> order number (index + 1)
+    // Get bookings for THIS trip directly from API to ensure we get all bookings
+    // (local state may be filtered for depot managers and miss forwarding trip bookings)
     const depotOrderMap: Record<string, number> = {};
     depots.forEach((depot, index) => {
       depotOrderMap[depot.name] = index + 1; // 1-based order
     });
 
-    const tripBookings = bookings
-      .filter(b => b.trip_id === trip.id)
-      .sort((a, b) => {
-        const orderA = depotOrderMap[a.destination_depot_name] || 999;
-        const orderB = depotOrderMap[b.destination_depot_name] || 999;
-        return orderA - orderB;
-      });
+    let tripBookingsData: Booking[] = [];
+    try {
+      const res = await tripsApi.getBookingsForTrip(trip.id);
+      tripBookingsData = res.bookings || [];
+    } catch (err) {
+      console.error('Error fetching trip bookings for memo:', err);
+      // Fallback to local filtered bookings
+      tripBookingsData = bookings.filter(b => b.trip_id === trip.id);
+    }
+
+    const tripBookings = tripBookingsData.sort((a: any, b: any) => {
+      const orderA = depotOrderMap[a.destination_depot_name] || 999;
+      const orderB = depotOrderMap[b.destination_depot_name] || 999;
+      return orderA - orderB;
+    });
 
     // Bookings Header
     doc.setFontSize(11);
@@ -542,15 +553,18 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
                       ₹{(Number(trip.trip_cost) || 0).toLocaleString('en-IN')}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Revenue</p>
-                    <p className="text-sm font-medium text-green-600">
-                      ₹{bookings
-                        .filter(b => b.status === 'in_transit' || b.status === 'delivered')
-                        .reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0)
-                        .toLocaleString('en-IN')}
-                    </p>
-                  </div>
+                  {/* Only show Revenue for owners/admins - depot managers don't generate revenue */}
+                  {userRole === 'owner' && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Revenue</p>
+                      <p className="text-sm font-medium text-green-600">
+                        ₹{bookings
+                          .filter(b => b.trip_id === trip.id)
+                          .reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0)
+                          .toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Delivery Progress</p>
                     <p className="text-sm font-medium text-gray-900">
