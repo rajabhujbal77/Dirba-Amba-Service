@@ -487,18 +487,52 @@ export const tripsApi = {
       }
 
       // Also populate trip_bookings junction table for querying
-      const tripBookingsRows = bookingIds.map(bookingId => ({
-        trip_id: data.id,
-        booking_id: bookingId
-      }));
+      // For forwarding trips: only check duplicates within forwarding trips from this depot
+      // (bookings can legitimately be in both original trip AND forwarding trip)
+      let bookingIdsToInsert = bookingIds;
 
-      const { error: junctionError } = await supabase
-        .from('trip_bookings')
-        .insert(tripBookingsRows);
+      if (tripData.isForwarding && tripData.originId) {
+        // Get all forwarding trips from this depot
+        const { data: forwardingTrips } = await supabase
+          .from('trips')
+          .select('id')
+          .eq('origin_depot_id', tripData.originId);
 
-      if (junctionError) {
-        console.error('Error inserting trip_bookings:', junctionError);
-        // Don't throw - bookings are already linked via trip_id
+        if (forwardingTrips && forwardingTrips.length > 0) {
+          const forwardingTripIds = forwardingTrips.map(t => t.id);
+
+          // Check which bookings are already in forwarding trips from this depot
+          const { data: existingEntries } = await supabase
+            .from('trip_bookings')
+            .select('booking_id')
+            .in('trip_id', forwardingTripIds)
+            .in('booking_id', bookingIds);
+
+          if (existingEntries && existingEntries.length > 0) {
+            const existingBookingIds = new Set(existingEntries.map(e => e.booking_id));
+            bookingIdsToInsert = bookingIds.filter(id => !existingBookingIds.has(id));
+            console.warn(`[tripsApi.create] Skipping ${existingEntries.length} bookings already in forwarding trips from this depot:`,
+              Array.from(existingBookingIds));
+          }
+        }
+      }
+
+      if (bookingIdsToInsert.length > 0) {
+        const tripBookingsRows = bookingIdsToInsert.map(bookingId => ({
+          trip_id: data.id,
+          booking_id: bookingId
+        }));
+
+        const { error: junctionError } = await supabase
+          .from('trip_bookings')
+          .insert(tripBookingsRows);
+
+        if (junctionError) {
+          console.error('Error inserting trip_bookings:', junctionError);
+          // Don't throw - bookings are already linked via trip_id
+        } else {
+          console.log(`[tripsApi.create] Inserted ${bookingIdsToInsert.length} entries into trip_bookings for trip ${data.id}`);
+        }
       }
     }
 
@@ -607,6 +641,50 @@ export const tripsApi = {
     }
 
     return { bookings: bookingsData || [] };
+  },
+
+  /**
+   * Get booking IDs that are already in forwarding trips from a specific depot.
+   * Used to filter out bookings that shouldn't appear in the "Create Forwarding Trip" screen.
+   */
+  async getBookingIdsInForwardingTrips(depotId: string) {
+    try {
+      // First get all forwarding trips from this depot
+      const { data: forwardingTrips, error: tripsError } = await supabase
+        .from('trips')
+        .select('id')
+        .eq('origin_depot_id', depotId);
+
+      if (tripsError) {
+        console.error('Error fetching forwarding trips:', tripsError);
+        return { bookingIds: [] };
+      }
+
+      if (!forwardingTrips || forwardingTrips.length === 0) {
+        return { bookingIds: [] };
+      }
+
+      const tripIds = forwardingTrips.map(t => t.id);
+
+      // Get all booking IDs in these forwarding trips from junction table
+      const { data: junctionData, error: junctionError } = await supabase
+        .from('trip_bookings')
+        .select('booking_id')
+        .in('trip_id', tripIds);
+
+      if (junctionError) {
+        console.error('Error fetching trip_bookings:', junctionError);
+        return { bookingIds: [] };
+      }
+
+      const bookingIds = junctionData?.map(j => j.booking_id) || [];
+      console.log(`[getBookingIdsInForwardingTrips] Found ${bookingIds.length} bookings already in forwarding trips from depot ${depotId}`);
+
+      return { bookingIds };
+    } catch (error) {
+      console.error('Error in getBookingIdsInForwardingTrips:', error);
+      return { bookingIds: [] };
+    }
   },
 
   /**

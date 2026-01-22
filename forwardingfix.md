@@ -170,6 +170,107 @@ fix: forwarding trip bugs for depot managers
 
 ---
 
+## Fix Update (2026-01-22)
+
+**Issue:** Receipts still visible after creating forwarding trips (original fix incomplete)
+
+### Root Cause Analysis
+
+1. **RLS Policy Blocking Status Update:** Depot managers couldn't update bookings from other depots, so status wasn't changing to `'in_transit_forwarding'`
+2. **Junction Table Not Populated:** The `trip_bookings` insert was blocked by overly aggressive duplicate prevention
+3. **Duplicate Prevention Bug:** Checking ALL `trip_bookings` entries, not just forwarding trips from the same depot
+
+### Additional Changes Made
+
+#### 1. `src/app/components/TripCreation.tsx` (lines 118-136)
+
+Added fallback filter using junction table:
+```diff
++        // Fetch booking IDs already in forwarding trips from this depot
++        const alreadyForwardedRes = await tripsApi.getBookingIdsInForwardingTrips(assignedDepotId);
++        const alreadyForwardedSet = new Set(alreadyForwardedRes.bookingIds || []);
++
+         const forwardingBookings = (bookingsRes.bookings || []).filter((b: Booking) =>
+           ['in_transit', 'reached_depot'].includes(b.status) &&
+-          destinationIds.includes(b.destination_depot_id)
++          destinationIds.includes(b.destination_depot_id) &&
++          !alreadyForwardedSet.has(b.id)
+         );
+```
+
+#### 2. `src/app/utils/api.ts` - New function `getBookingIdsInForwardingTrips`
+
+```typescript
+async getBookingIdsInForwardingTrips(depotId: string) {
+  // Get all forwarding trips from this depot
+  const { data: forwardingTrips } = await supabase
+    .from('trips')
+    .select('id')
+    .eq('origin_depot_id', depotId);
+
+  if (!forwardingTrips?.length) return { bookingIds: [] };
+
+  // Get all booking IDs in these forwarding trips from junction table
+  const { data: junctionData } = await supabase
+    .from('trip_bookings')
+    .select('booking_id')
+    .in('trip_id', forwardingTrips.map(t => t.id));
+
+  return { bookingIds: junctionData?.map(j => j.booking_id) || [] };
+}
+```
+
+#### 3. `src/app/utils/api.ts` - Fixed duplicate prevention in `tripsApi.create`
+
+```diff
+-      // First, check for existing entries to prevent duplicates
+-      const { data: existingEntries } = await supabase
+-        .from('trip_bookings')
+-        .select('booking_id')
+-        .in('booking_id', bookingIds);
++      // For forwarding trips: only check duplicates within forwarding trips from this depot
++      // (bookings can legitimately be in both original trip AND forwarding trip)
++      if (tripData.isForwarding && tripData.originId) {
++        // Get all forwarding trips from this depot
++        const { data: forwardingTrips } = await supabase
++          .from('trips')
++          .select('id')
++          .eq('origin_depot_id', tripData.originId);
++
++        // Check which bookings are already in forwarding trips from this depot
++        const { data: existingEntries } = await supabase
++          .from('trip_bookings')
++          .select('booking_id')
++          .in('trip_id', forwardingTripIds)
++          .in('booking_id', bookingIds);
++        // ... skip only those already in forwarding trips
++      }
+```
+
+---
+
+## DB Verification Queries
+
+```sql
+-- Check trip_bookings entries for forwarding trips
+SELECT tb.trip_id, tb.booking_id, t.trip_number, b.status
+FROM trip_bookings tb
+JOIN trips t ON t.id = tb.trip_id
+JOIN bookings b ON b.id = tb.booking_id
+WHERE t.origin_depot_id = '8e71e999-ae68-4c0e-bd12-fdeb5170b585'
+ORDER BY t.created_at DESC;
+
+-- Verify no duplicates exist within forwarding trips
+SELECT booking_id, COUNT(*) as count
+FROM trip_bookings tb
+JOIN trips t ON t.id = tb.trip_id
+WHERE t.origin_depot_id = '8e71e999-ae68-4c0e-bd12-fdeb5170b585'
+GROUP BY booking_id
+HAVING COUNT(*) > 1;
+```
+
+---
+
 ## Testing Notes
 
 - Login as depot manager with forwarding routes (e.g., sadashiv@mango.com)
@@ -177,3 +278,4 @@ fix: forwarding trip bugs for depot managers
 - Verify receipts disappear after trip creation
 - Verify driver's memo contains booking details
 - Verify Revenue is hidden for depot manager view
+

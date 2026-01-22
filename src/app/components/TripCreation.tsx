@@ -116,15 +116,21 @@ export default function TripCreation({ userRole, assignedDepotId }: TripCreation
 
         console.log('Forwarding destinations for depot:', assignedDepotId, destinationIds);
 
+        // Fetch booking IDs already in forwarding trips from this depot
+        // This is a fallback filter in case the status update to 'in_transit_forwarding' fails
+        const alreadyForwardedRes = await tripsApi.getBookingIdsInForwardingTrips(assignedDepotId);
+        const alreadyForwardedSet = new Set(alreadyForwardedRes.bookingIds || []);
+        console.log('Already forwarded booking IDs:', alreadyForwardedRes.bookingIds);
+
         // For forwarding trips: show bookings that are in_transit or reached_depot
         // AND destined for one of the forwarding destinations
-        // AND not already added to a forwarding trip (status != 'in_transit_forwarding')
-        // Note: These bookings already have trip_id from origin trip, so we check status instead
+        // AND not already added to a forwarding trip (check both status AND junction table)
+        // Note: These bookings already have trip_id from origin trip, so we check status + junction table
         // These are packages that arrived at this depot and need to be forwarded
         const forwardingBookings = (bookingsRes.bookings || []).filter((b: Booking) =>
           ['in_transit', 'reached_depot'].includes(b.status) &&
-          destinationIds.includes(b.destination_depot_id)
-          // Note: status check already excludes 'in_transit_forwarding' since we only include 'in_transit' and 'reached_depot'
+          destinationIds.includes(b.destination_depot_id) &&
+          !alreadyForwardedSet.has(b.id)
         );
 
         setAvailableBookings(forwardingBookings);
