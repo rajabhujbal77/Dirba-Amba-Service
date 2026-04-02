@@ -128,6 +128,12 @@ async function executeOperation(operation: PendingOperation): Promise<{ success:
                 return { success: true };
             }
 
+            case 'MARK_RECEIVER_DELIVERED': {
+                const { receiverId, bookingId: rBookingId, paymentMethod: rPaymentMethod } = operation.payload;
+                await bookingsApi.markReceiverDelivered(receiverId, rBookingId, rPaymentMethod);
+                return { success: true };
+            }
+
             case 'UPDATE_TRIP_STATUS': {
                 const { tripId, status } = operation.payload;
                 await tripsApi.update(tripId, { status });

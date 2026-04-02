@@ -6,6 +6,7 @@ export type OperationType =
     | 'CREATE_BOOKING'
     | 'CREATE_TRIP'
     | 'MARK_DELIVERED'
+    | 'MARK_RECEIVER_DELIVERED'
     | 'UPDATE_TRIP_STATUS'
     | 'UPDATE_BOOKING';
 

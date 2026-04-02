@@ -27,6 +27,18 @@ interface Trip {
   delivered_bookings: number;
 }
 
+interface Receiver {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  status: string;
+  delivered_at?: string;
+  to_pay_collected_method?: string;
+  to_pay_collected_at?: string;
+  packages: any[];
+}
+
 interface Booking {
   id: string;
   receipt_number: string;
@@ -38,7 +50,7 @@ interface Booking {
   status: string;
   payment_method: string;
   created_at: string;
-  receivers: any[];
+  receivers: Receiver[];
   trip_id?: string;
 }
 
@@ -50,9 +62,13 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [toPayCollectionMethods, setToPayCollectionMethods] = useState<Record<string, string>>({});
+  // Per-receiver to_pay collection methods (keyed by receiverId)
+  const [toPayReceiverMethods, setToPayReceiverMethods] = useState<Record<string, string>>({});
 
   // Track which items are pending sync
   const [pendingDeliveries, setPendingDeliveries] = useState<Set<string>>(new Set());
+  // Track which receivers are pending sync
+  const [pendingReceiverDeliveries, setPendingReceiverDeliveries] = useState<Set<string>>(new Set());
 
   // Zustand stores for offline support
   const isOnline = useOnlineStore((state) => state.isOnline);
@@ -198,6 +214,82 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
       const newMethods = { ...toPayCollectionMethods };
       delete newMethods[bookingId];
       setToPayCollectionMethods(newMethods);
+    }
+  };
+
+  // ---- GRANULAR RECEIVER DELIVERY ----
+
+  const handleMarkReceiverDelivered = async (receiverId: string, bookingId: string, paymentMethod?: string) => {
+    if (isOnline) {
+      try {
+        const result = await bookingsApi.markReceiverDelivered(receiverId, bookingId, paymentMethod);
+
+        // Check if trip should auto-complete when booking is fully delivered
+        if (result.newBookingStatus === 'delivered') {
+          const booking = bookings.find(b => b.id === bookingId);
+          const tripId = booking?.trip_id;
+          if (tripId) {
+            const { autoCompleted } = await tripsApi.checkAndAutoComplete(tripId);
+            if (autoCompleted) {
+              console.log(`Trip ${tripId} auto-completed after all managed deliveries done`);
+            }
+          }
+        }
+
+        // Clear per-receiver payment method
+        if (toPayReceiverMethods[receiverId]) {
+          const newMethods = { ...toPayReceiverMethods };
+          delete newMethods[receiverId];
+          setToPayReceiverMethods(newMethods);
+        }
+
+        await loadData(); // Refresh data
+      } catch (error: any) {
+        console.error('Error marking receiver delivered:', error);
+
+        if (isNetworkError(error)) {
+          console.log('[TripsDeliveries] Network error detected, queuing receiver delivery');
+          queueReceiverDeliveryOffline(receiverId, bookingId, paymentMethod);
+        } else {
+          alert('Error marking receiver as delivered');
+        }
+      }
+    } else {
+      queueReceiverDeliveryOffline(receiverId, bookingId, paymentMethod);
+    }
+  };
+
+  const queueReceiverDeliveryOffline = (receiverId: string, bookingId: string, paymentMethod?: string) => {
+    queueOperation('MARK_RECEIVER_DELIVERED', {
+      receiverId,
+      bookingId,
+      paymentMethod
+    }, {
+      entityType: 'delivery',
+      entityId: receiverId,
+      optimisticData: { receiverId, status: 'delivered', markedAt: new Date().toISOString() }
+    });
+
+    // Optimistic UI update for receiver
+    setPendingReceiverDeliveries(prev => new Set([...prev, receiverId]));
+
+    // Update local state optimistically
+    setBookings(prev => prev.map(b => {
+      if (b.id !== bookingId) return b;
+      const updatedReceivers = b.receivers.map(r =>
+        r.id === receiverId ? { ...r, status: 'delivered', delivered_at: new Date().toISOString() } : r
+      );
+      const deliveredCount = updatedReceivers.filter(r => r.status === 'delivered').length;
+      const newStatus = deliveredCount === updatedReceivers.length ? 'delivered' :
+        deliveredCount > 0 ? 'partially_delivered' : b.status;
+      return { ...b, receivers: updatedReceivers, status: newStatus };
+    }));
+
+    // Clear per-receiver payment method
+    if (toPayReceiverMethods[receiverId]) {
+      const newMethods = { ...toPayReceiverMethods };
+      delete newMethods[receiverId];
+      setToPayReceiverMethods(newMethods);
     }
   };
 
@@ -366,6 +458,8 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
       case 'loading':
       case 'planned':
         return 'bg-orange-100 text-orange-700';
+      case 'partially_delivered':
+        return 'bg-amber-100 text-amber-700';
       case 'completed':
       case 'delivered':
         return 'bg-green-100 text-green-700';
@@ -403,15 +497,28 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
     return count;
   };
 
-  // Filter bookings for deliveries tab (in_transit or delivered)
+  // Filter bookings for deliveries tab (in_transit, partially_delivered, or delivered)
   // Exclude 'booked' status for safety (should already be filtered out for depot managers)
   const deliveryBookings = bookings.filter(b =>
     b.status !== 'booked' && ( // Additional safety filter
       statusFilter === 'all'
-        ? ['in_transit', 'delivered'].includes(b.status)
+        ? ['in_transit', 'partially_delivered', 'delivered'].includes(b.status)
         : b.status === statusFilter
     )
   );
+
+  // Helper: count total and delivered receivers across all bookings
+  const getReceiverCounts = (bookingList: Booking[]) => {
+    let total = 0;
+    let delivered = 0;
+    bookingList.forEach(b => {
+      if (Array.isArray(b.receivers)) {
+        total += b.receivers.length;
+        delivered += b.receivers.filter(r => r.status === 'delivered').length;
+      }
+    });
+    return { total, delivered };
+  };
 
   // Filter trips
   const filteredTrips = trips.filter(t =>
@@ -467,7 +574,7 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
             : 'border-transparent text-gray-600 hover:text-gray-900'
             }`}
         >
-          Deliveries ({bookings.filter(b => ['in_transit', 'delivered'].includes(b.status)).length})
+          Deliveries ({bookings.filter(b => ['in_transit', 'partially_delivered', 'delivered'].includes(b.status)).length})
         </button>
       </div>
 
@@ -505,6 +612,13 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
                 }`}
             >
               In Transit
+            </button>
+            <button
+              onClick={() => setStatusFilter('partially_delivered')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${statusFilter === 'partially_delivered' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+              Partial
             </button>
             <button
               onClick={() => setStatusFilter('delivered')}
@@ -567,21 +681,31 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
                   )}
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Delivery Progress</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {trip.delivered_bookings || 0}/{trip.total_bookings || 0} delivered
-                    </p>
-                    {/* Progress bar */}
-                    {trip.total_bookings > 0 && (
-                      <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all ${trip.delivered_bookings === trip.total_bookings
-                            ? 'bg-green-500'
-                            : 'bg-orange-500'
-                            }`}
-                          style={{ width: `${(trip.delivered_bookings / trip.total_bookings) * 100}%` }}
-                        ></div>
-                      </div>
-                    )}
+                    {(() => {
+                      const tripBookings = bookings.filter(b => b.trip_id === trip.id);
+                      const { total, delivered } = getReceiverCounts(tripBookings);
+                      return (
+                        <>
+                          <p className="text-sm font-medium text-gray-900">
+                            {delivered}/{total} receivers delivered
+                          </p>
+                          {/* Progress bar */}
+                          {total > 0 && (
+                            <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${delivered === total
+                                  ? 'bg-green-500'
+                                  : delivered > 0
+                                    ? 'bg-amber-500'
+                                    : 'bg-orange-500'
+                                  }`}
+                                style={{ width: `${(delivered / total) * 100}%` }}
+                              ></div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -686,44 +810,82 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
                   </div>
                 )}
 
-                {/* ACTION BUTTON - Prominent on mobile */}
-                {booking.status === 'in_transit' && booking.payment_method === 'to_pay' ? (
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={toPayCollectionMethods[booking.id] || ''}
-                      onChange={(e) => setToPayCollectionMethods({
-                        ...toPayCollectionMethods,
-                        [booking.id]: e.target.value
-                      })}
-                      className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500"
-                    >
-                      <option value="">Select Payment Method</option>
-                      <option value="cash">Cash</option>
-                      <option value="online">Online/UPI</option>
-                    </select>
-                    <button
-                      onClick={() => handleMarkDelivered(booking.id, toPayCollectionMethods[booking.id])}
-                      disabled={!toPayCollectionMethods[booking.id]}
-                      className={`w-full py-3 rounded-lg font-medium text-center ${toPayCollectionMethods[booking.id]
-                        ? 'bg-green-500 text-white hover:bg-green-600'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                    >
-                      {!isOnline ? '📤 Mark Delivered (Offline)' : '✓ Mark Delivered'}
-                    </button>
+                {/* PER-RECEIVER DELIVERY CONTROLS */}
+                {Array.isArray(booking.receivers) && booking.receivers.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase">Receivers</p>
+                    {booking.receivers.map((receiver, rIdx) => (
+                      <div key={receiver.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{receiver.name}</p>
+                            <p className="text-xs text-gray-500">{receiver.phone}</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(receiver.status || 'in_transit')}`}>
+                            {(receiver.status || 'in_transit').replace('_', ' ')}
+                          </span>
+                        </div>
+                        {receiver.address && (
+                          <p className="text-xs text-gray-400 mb-1">📍 {receiver.address}</p>
+                        )}
+                        {/* Package count for this receiver */}
+                        {Array.isArray(receiver.packages) && (
+                          <p className="text-xs text-gray-500 mb-2">
+                            {receiver.packages.reduce((sum: number, p: any) => sum + (Number(p.quantity) || 0), 0)} pkgs
+                          </p>
+                        )}
+
+                        {/* Pending sync for this receiver */}
+                        {pendingReceiverDeliveries.has(receiver.id) && (
+                          <div className="mb-1 text-xs text-amber-600 flex items-center gap-1">
+                            <span className="animate-pulse">⏳</span> Pending sync
+                          </div>
+                        )}
+
+                        {/* Action button per receiver */}
+                        {(receiver.status || 'in_transit') !== 'delivered' && ['in_transit', 'partially_delivered'].includes(booking.status) ? (
+                          booking.payment_method === 'to_pay' ? (
+                            <div className="flex flex-col gap-1">
+                              <select
+                                value={toPayReceiverMethods[receiver.id] || ''}
+                                onChange={(e) => setToPayReceiverMethods({
+                                  ...toPayReceiverMethods,
+                                  [receiver.id]: e.target.value
+                                })}
+                                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:ring-2 focus:ring-orange-500"
+                              >
+                                <option value="">Select Payment</option>
+                                <option value="cash">Cash</option>
+                                <option value="online">Online/UPI</option>
+                              </select>
+                              <button
+                                onClick={() => handleMarkReceiverDelivered(receiver.id, booking.id, toPayReceiverMethods[receiver.id])}
+                                disabled={!toPayReceiverMethods[receiver.id]}
+                                className={`w-full py-2 rounded-lg text-sm font-medium ${toPayReceiverMethods[receiver.id]
+                                  ? 'bg-green-500 text-white hover:bg-green-600'
+                                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                  }`}
+                              >
+                                {!isOnline ? '📤 Deliver (Offline)' : '✓ Mark Delivered'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleMarkReceiverDelivered(receiver.id, booking.id)}
+                              className="w-full py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
+                            >
+                              {!isOnline ? '📤 Deliver (Offline)' : '✓ Mark Delivered'}
+                            </button>
+                          )
+                        ) : (receiver.status === 'delivered') ? (
+                          <div className="w-full py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium text-center">
+                            ✓ Delivered {pendingReceiverDeliveries.has(receiver.id) && '(syncing...)'}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
                   </div>
-                ) : booking.status === 'in_transit' ? (
-                  <button
-                    onClick={() => handleMarkDelivered(booking.id)}
-                    className="w-full py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600"
-                  >
-                    {!isOnline ? '📤 Mark Delivered (Offline)' : '✓ Mark Delivered'}
-                  </button>
-                ) : booking.status === 'delivered' ? (
-                  <div className="w-full py-3 bg-green-100 text-green-700 rounded-lg font-medium text-center">
-                    ✓ Delivered {pendingDeliveries.has(booking.id) && '(syncing...)'}
-                  </div>
-                ) : null}
+                )}
               </div>
             )) : (
               <div className="p-12 text-center text-gray-500">
@@ -806,50 +968,79 @@ export default function TripsDeliveries({ userRole, assignedDepotId }: TripsDeli
                         {booking.status?.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       {/* Pending sync indicator */}
                       {pendingDeliveries.has(booking.id) && (
                         <span className="inline-flex items-center gap-1 text-xs text-amber-600 mb-1">
                           <span className="animate-pulse">⏳</span> Pending sync
                         </span>
                       )}
-                      {booking.status === 'in_transit' && booking.payment_method === 'to_pay' ? (
-                        <div className="flex flex-col gap-2 min-w-[140px]">
-                          <select
-                            value={toPayCollectionMethods[booking.id] || ''}
-                            onChange={(e) => setToPayCollectionMethods({
-                              ...toPayCollectionMethods,
-                              [booking.id]: e.target.value
-                            })}
-                            className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-orange-500"
-                          >
-                            <option value="">Select Payment</option>
-                            <option value="cash">Cash</option>
-                            <option value="online">Online/UPI</option>
-                          </select>
-                          <button
-                            onClick={() => handleMarkDelivered(booking.id, toPayCollectionMethods[booking.id])}
-                            disabled={!toPayCollectionMethods[booking.id]}
-                            className={`text-sm font-medium px-2 py-1 rounded ${toPayCollectionMethods[booking.id]
-                              ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
-                              : 'text-gray-400 cursor-not-allowed bg-gray-50'
-                              }`}
-                          >
-                            {!isOnline ? '📤 Mark (Offline)' : 'Mark Delivered'}
-                          </button>
+                      {/* Per-receiver delivery controls */}
+                      {Array.isArray(booking.receivers) && booking.receivers.length > 0 ? (
+                        <div className="space-y-2 min-w-[200px]">
+                          {booking.receivers.map((receiver) => (
+                            <div key={receiver.id} className="p-2 bg-gray-50 rounded border border-gray-100">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-medium text-gray-900 truncate max-w-[120px]" title={receiver.name}>
+                                  {receiver.name}
+                                </span>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getStatusColor(receiver.status || 'in_transit')}`}>
+                                  {(receiver.status || 'in_transit').replace('_', ' ')}
+                                </span>
+                              </div>
+
+                              {pendingReceiverDeliveries.has(receiver.id) && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-600">
+                                  <span className="animate-pulse">⏳</span> syncing
+                                </span>
+                              )}
+
+                              {(receiver.status || 'in_transit') !== 'delivered' && ['in_transit', 'partially_delivered'].includes(booking.status) ? (
+                                booking.payment_method === 'to_pay' ? (
+                                  <div className="flex flex-col gap-1 mt-1">
+                                    <select
+                                      value={toPayReceiverMethods[receiver.id] || ''}
+                                      onChange={(e) => setToPayReceiverMethods({
+                                        ...toPayReceiverMethods,
+                                        [receiver.id]: e.target.value
+                                      })}
+                                      className="text-[10px] border border-gray-300 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-orange-500"
+                                    >
+                                      <option value="">Payment</option>
+                                      <option value="cash">Cash</option>
+                                      <option value="online">Online</option>
+                                    </select>
+                                    <button
+                                      onClick={() => handleMarkReceiverDelivered(receiver.id, booking.id, toPayReceiverMethods[receiver.id])}
+                                      disabled={!toPayReceiverMethods[receiver.id]}
+                                      className={`text-xs font-medium px-2 py-0.5 rounded ${toPayReceiverMethods[receiver.id]
+                                        ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                                        : 'text-gray-400 cursor-not-allowed'
+                                        }`}
+                                    >
+                                      {!isOnline ? '📤' : '✓'} Deliver
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleMarkReceiverDelivered(receiver.id, booking.id)}
+                                    className="mt-1 text-xs text-green-600 hover:text-green-700 font-medium"
+                                  >
+                                    {!isOnline ? '📤' : '✓'} Mark Delivered
+                                  </button>
+                                )
+                              ) : (receiver.status === 'delivered') ? (
+                                <span className="text-xs text-green-600">✓ Delivered</span>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
-                      ) : booking.status === 'in_transit' ? (
-                        <button
-                          onClick={() => handleMarkDelivered(booking.id)}
-                          className="text-sm text-green-600 hover:text-green-700 font-medium"
-                        >
-                          {!isOnline ? '📤 Mark (Offline)' : 'Mark Delivered'}
-                        </button>
-                      ) : booking.status === 'delivered' ? (
-                        <span className="text-sm text-green-600">
-                          ✓ Delivered {pendingDeliveries.has(booking.id) && '(syncing...)'}
-                        </span>
-                      ) : null}
+                      ) : (
+                        // Fallback for bookings with no receiver data
+                        booking.status === 'delivered' ? (
+                          <span className="text-sm text-green-600">✓ Delivered</span>
+                        ) : null
+                      )}
                     </td>
                   </tr>
                 )) : (

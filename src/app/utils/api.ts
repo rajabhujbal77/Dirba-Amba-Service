@@ -8,7 +8,7 @@ export const supabase = createClient(
 );
 
 // Types matching the DB Schema (Simplified)
-export type BookingStatus = 'booked' | 'loading' | 'in_transit' | 'reached_depot' | 'out_for_delivery' | 'delivered';
+export type BookingStatus = 'booked' | 'loading' | 'in_transit' | 'reached_depot' | 'out_for_delivery' | 'partially_delivered' | 'delivered';
 export type TripStatus = 'planned' | 'loading' | 'in_transit' | 'completed' | 'cancelled';
 
 // Authentication
@@ -414,6 +414,76 @@ export const bookingsApi = {
 
     console.log('[BookingsAPI] Receipt edited successfully:', existingBooking.receipt_number);
     return { booking: updatedBooking };
+  },
+
+  /**
+   * Mark an individual receiver as delivered (granular delivery).
+   * Updates the receiver's status and checks if the parent booking
+   * should transition to 'partially_delivered' or 'delivered'.
+   */
+  async markReceiverDelivered(receiverId: string, bookingId: string, paymentMethod?: string) {
+    // 1. Update receiver status to delivered
+    const receiverUpdate: any = {
+      status: 'delivered',
+      delivered_at: new Date().toISOString()
+    };
+
+    // For to_pay bookings, track per-receiver payment collection
+    if (paymentMethod) {
+      receiverUpdate.to_pay_collected_method = paymentMethod;
+      receiverUpdate.to_pay_collected_at = new Date().toISOString();
+    }
+
+    const { error: receiverError } = await supabase
+      .from('booking_receivers')
+      .update(receiverUpdate)
+      .eq('id', receiverId);
+
+    if (receiverError) throw receiverError;
+
+    // 2. Check all receivers for this booking
+    const { data: allReceivers, error: fetchError } = await supabase
+      .from('booking_receivers')
+      .select('id, status')
+      .eq('booking_id', bookingId);
+
+    if (fetchError) throw fetchError;
+
+    const totalReceivers = allReceivers?.length || 0;
+    const deliveredReceivers = allReceivers?.filter((r: any) => r.status === 'delivered').length || 0;
+
+    // 3. Determine new booking status
+    let newBookingStatus: string;
+    if (deliveredReceivers === totalReceivers) {
+      newBookingStatus = 'delivered';
+    } else if (deliveredReceivers > 0) {
+      newBookingStatus = 'partially_delivered';
+    } else {
+      newBookingStatus = 'in_transit'; // fallback
+    }
+
+    // 4. Update booking status
+    const bookingUpdate: any = { status: newBookingStatus };
+    if (newBookingStatus === 'delivered') {
+      bookingUpdate.delivered_at = new Date().toISOString();
+    }
+
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .update(bookingUpdate)
+      .eq('id', bookingId);
+
+    if (bookingError) throw bookingError;
+
+    console.log(`[BookingsAPI] Receiver ${receiverId} marked delivered. Booking ${bookingId} → ${newBookingStatus} (${deliveredReceivers}/${totalReceivers})`);
+
+    return {
+      receiverId,
+      bookingId,
+      newBookingStatus,
+      deliveredReceivers,
+      totalReceivers
+    };
   },
 };
 
