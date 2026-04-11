@@ -165,7 +165,8 @@ export const bookingsApi = {
         subtotal: bookingData.subtotal || 0,
         total_amount: bookingData.total_amount || 0,
         status: bookingData.current_status || 'booked',
-        custom_instructions: bookingData.special_instructions
+        custom_instructions: bookingData.special_instructions,
+        created_at: bookingData.created_at
       },
       p_receivers: (bookingData.receivers || []).map((r: any, i: number) => ({
         name: r.name,
@@ -210,7 +211,8 @@ export const bookingsApi = {
           subtotal: bookingData.subtotal,
           total_amount: bookingData.total_amount,
           status: bookingData.current_status || 'booked',
-          custom_instructions: bookingData.special_instructions
+          custom_instructions: bookingData.special_instructions,
+          created_at: bookingData.created_at || undefined
         })
         .select()
         .single();

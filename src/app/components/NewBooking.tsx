@@ -33,13 +33,15 @@ interface BookingFormData {
   senderName: string;
   senderPhone: string;
   receivers: Receiver[];
+  bookingDate: string;
 }
 
 interface NewBookingProps {
   onNavigate?: (page: string) => void;
+  userRole?: string;
 }
 
-export default function NewBooking({ onNavigate }: NewBookingProps) {
+export default function NewBooking({ onNavigate, userRole }: NewBookingProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [season, setSeason] = useState<any>(null);
   const [isSeasonActive, setIsSeasonActive] = useState(true);
@@ -65,7 +67,8 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
     customInstructions: '',
     senderName: '',
     senderPhone: '',
-    receivers: [{ name: '', phone: '', address: '', packages: [] }]
+    receivers: [{ name: '', phone: '', address: '', packages: [] }],
+    bookingDate: new Date().toISOString().split('T')[0]
   });
 
   // Check for draft on mount
@@ -216,7 +219,8 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
         subtotal: calculateTotal() - (formData.deliveryCharge || 0),
         total_amount: calculateTotal(),
         current_status: 'booked',
-        special_instructions: formData.customInstructions
+        special_instructions: formData.customInstructions,
+        created_at: new Date(formData.bookingDate + 'T12:00:00Z').toISOString()
       };
 
       if (isOnline) {
@@ -345,7 +349,8 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
       customInstructions: '',
       senderName: '',
       senderPhone: '',
-      receivers: [{ name: '', phone: '', address: '', packages: [] }]
+      receivers: [{ name: '', phone: '', address: '', packages: [] }],
+      bookingDate: new Date().toISOString().split('T')[0]
     });
     setReceiptNumber('');
     setCurrentStep(1);
@@ -506,6 +511,8 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
             setFormData={setFormData}
             depots={depots}
             onNext={nextStep}
+            userRole={userRole}
+            season={season}
           />
         )}
 
@@ -562,9 +569,10 @@ export default function NewBooking({ onNavigate }: NewBookingProps) {
 // ============================================================================
 // STEP 1: Depot, Payment & Delivery
 // ============================================================================
-function Step1DepotPaymentDelivery({ formData, setFormData, depots, onNext }: any) {
+function Step1DepotPaymentDelivery({ formData, setFormData, depots, onNext, userRole, season }: any) {
   const originDepotId = useId();
   const destinationDepotId = useId();
+  const bookingDateId = useId();
   const deliveryChargeId = useId();
   const instructionsId = useId();
 
@@ -590,7 +598,33 @@ function Step1DepotPaymentDelivery({ formData, setFormData, depots, onNext }: an
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Step 1: Route & Payment</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h2 className="text-2xl font-bold text-gray-900">Step 1: Route & Payment</h2>
+        
+        {/* Date Picker for Admin (Backdated bookings) */}
+        {userRole === 'owner' && (
+          <div className="w-full sm:w-auto relative group">
+            <div className="flex items-center gap-2">
+              <label htmlFor={bookingDateId} className="text-sm font-medium text-gray-500 hidden sm:block">Date:</label>
+              <input
+                type="date"
+                id={bookingDateId}
+                value={formData.bookingDate}
+                min={season?.startDate?.split('T')[0]}
+                max={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setFormData({ ...formData, bookingDate: e.target.value })}
+                className="w-full sm:w-auto px-3 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 bg-orange-50 text-orange-900 font-medium shadow-sm transition-colors hover:border-orange-300"
+                title="Booking Date (Admin Only)"
+              />
+            </div>
+            {formData.bookingDate !== new Date().toISOString().split('T')[0] && (
+              <div className="absolute top-full right-0 mt-1 whitespace-nowrap text-amber-700 text-xs font-medium bg-amber-50 px-2 py-1 rounded border border-amber-200 shadow-sm z-10 animate-fade-in">
+                ⚠️ Backdated: {formData.bookingDate}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Depot Selection */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

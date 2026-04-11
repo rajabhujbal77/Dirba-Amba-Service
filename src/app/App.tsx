@@ -294,7 +294,7 @@ export default function App() {
         <main className="flex-1 pt-16 lg:pt-0">
           <Suspense fallback={<PageLoader />}>
             {currentPage === 'dashboard' && userRole && <Dashboard userRole={userRole} assignedDepotId={assignedDepotId} />}
-            {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={handlePageChange} />}
+            {currentPage === 'new_booking' && (userRole === 'owner' || userRole === 'booking_clerk') && <NewBooking onNavigate={handlePageChange} userRole={userRole} />}
             {currentPage === 'trip_creation' && (userRole === 'owner' || userRole === 'booking_clerk' ||
               (userRole === 'depot_manager' && depotInfo?.forwarding_enabled)) && <TripCreation userRole={userRole} assignedDepotId={assignedDepotId} />}
             {currentPage === 'trips_deliveries' && userRole && <TripsDeliveries userRole={userRole} assignedDepotId={assignedDepotId} />}
